@@ -42,9 +42,9 @@ int main(int argc, char *argv[])
 	double average = total / NUM_FORKS;
 
 	// Output the results.
-	printf("Syscalls Performed: %d\n", NUM_FORKS);
+	printf("Forks Performed: %d\n", NUM_FORKS);
 	printf("Total Elapsed Time: %8.5f microseconds\n", total);
-	printf("Average Time Per Syscall: %8.5f microseconds\n", average);
+	printf("Average Time Per Form: %8.5f microseconds\n", average);
 
 	return 0;
 }
