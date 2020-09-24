@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 #define NUM_FORKS 5000
 
