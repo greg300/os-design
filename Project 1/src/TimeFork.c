@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
 	// Output the results.
 	printf("Forks Performed: %d\n", NUM_FORKS);
 	printf("Total Elapsed Time: %8.5f microseconds\n", total);
-	printf("Average Time Per Form: %8.5f microseconds\n", average);
+	printf("Average Time Per Fork: %8.5f microseconds\n", average);
 
 	return 0;
 }
