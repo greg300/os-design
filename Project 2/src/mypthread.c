@@ -18,11 +18,13 @@
 int threadsCreated = 0;
 ucontext_t mainContext;
 runqueue * threadRunqueue;
+threadList * allThreads;
+tcb * runningThread;
 
 /* Create a new Linked List node. */
-queueNode * newQueueNode(tcb * threadControlBlock)
+node * newNode(tcb * threadControlBlock)
 {
-	queueNode * temp = (queueNode *) malloc(sizeof(queueNode));
+	node * temp = (node *) malloc(sizeof(node));
 	temp -> threadControlBlock = threadControlBlock;
 	temp -> next = NULL;
 	return temp;
@@ -37,11 +39,19 @@ runqueue * runqueueCreate()
 	return queue;
 }
 
+/* Create a new, empty threadList. */
+threadList * threadListCreate()
+{
+	threadList * threads = (threadList *) malloc(sizeof(threadList));
+	threads -> front = NULL;
+	return threads;
+}
+
 /* Add a thread to the runqueue. */
 void runqueueEnqueue(runqueue * queue, tcb * threadControlBlock)
 {
 	// Create a Linked List node.
-	queueNode * temp = newQueueNode(threadControlBlock);
+	node * temp = newNode(threadControlBlock);
 
 	// If this is the first insertion (runqueue is empty), set new node to both front and rear.
 	if (queue -> rear == NULL)
@@ -56,17 +66,27 @@ void runqueueEnqueue(runqueue * queue, tcb * threadControlBlock)
 	queue -> rear = temp;
 }
 
+/* Add a thread to the beginning of the threadList. */
+void threadListAdd(threadList * threads, tcb * threadControlBlock)
+{
+	// Create a Linked List node.
+	node * temp = newNode(threadControlBlock);
+
+	temp -> next = threads -> front;
+	threads -> front = temp;
+}
+
 /* Remove a thread from the runqueue. */
 void runqueueDequeue(runqueue * queue)
 {
-	// If queue is empty, return NULL.
+	// If queue is empty, return nothing.
 	if (queue -> front == NULL)
 	{
 		return;
 	}
 
 	// Store old front, and move current front one node ahead.
-	queueNode * temp = queue -> front;
+	node * temp = queue -> front;
 	queue -> front = queue -> front -> next;
 	
 	// If front becomes NULL (i.e., queue is empty), then fix rear to be NULL as well.
@@ -78,14 +98,77 @@ void runqueueDequeue(runqueue * queue)
 	free(temp);
 }
 
+/* Remove a thread from the threadList; return 1 if found, 0 if not. */
+int threadListRemove(threadList * threads, tcb * threadControlBlock)
+{
+	node * current = threads -> front;
+	node * prev = NULL;
+
+	// If list is empty, return 0.
+	if (current == NULL)
+	{
+		return 0;
+	}
+	// If front is the node to be deleted, change head and free old head.
+	if (current -> threadControlBlock == threadControlBlock)
+	{
+		threads -> front = current -> next;
+		free(current);
+		return 1;
+	}
+
+	// Traverse the list to find the node to delete.
+	while (current != NULL && current -> threadControlBlock != threadControlBlock)
+	{
+		prev = current;
+		current = current -> next;
+	}
+
+	// If the node was not present in the list, return 0.
+	if (current == NULL)
+	{
+		return 0;
+	}
+
+	// Otherwise, unlink the node from the list.
+	prev -> next = current -> next;
+	free(current);
+
+	return 1;
+}
+
+/* Search for a thread by threadID; return TCB if found, NULL if not. */
+tcb * threadListSearch(threadList * threads, mypthread_t * thread)
+{
+	node * current = threads -> front;
+
+	// If list is empty, return NULL.
+	if (current == NULL)
+	{
+		return NULL;
+	}
+
+	while (current != NULL)
+	{
+		if (current -> threadControlBlock -> threadID == thread)
+		{
+			return current -> threadControlBlock;
+		}
+		current = current -> next;
+	}
+
+	return NULL;
+}
+
 /* create a new thread */
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
                       void *(*function)(void*), void * arg)
 {
-	// If this is the first thread being created, create a runqueue.
+	// If this is the first thread being created, create a runqueue and threadList.
 	if (threadsCreated == 0)
 	{
 		threadRunqueue = runqueueCreate();
+		allThreads = threadListCreate();
 	}
 	// create Thread Control Block
 	tcb * controlBlock = (tcb *) malloc(sizeof(tcb));
@@ -107,6 +190,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	// after everything is all set, push this thread int
 	makecontext(newContext, (void (*)()) function, 1, arg);
 	runqueueEnqueue(threadRunqueue, controlBlock);
+	threadListAdd(allThreads, controlBlock);
 
 	// YOUR CODE HERE
 	threadsCreated++;
@@ -122,8 +206,13 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 int mypthread_yield() {
 
 	// change thread state from Running to Ready
+	runningThread -> threadStatus = READY;
+
 	// save context of this thread to its thread control block
+	//getcontext(runningThread -> threadContext);
+
 	// wwitch from thread context to scheduler context
+	swapcontext(runningThread -> threadContext, &mainContext);
 
 	// YOUR CODE HERE
 	return 0;
@@ -131,8 +220,17 @@ int mypthread_yield() {
 
 /* terminate a thread */
 void mypthread_exit(void *value_ptr) {
+	// If value_ptr is not NULL, save the return value.
+	// if (value_ptr != NULL)
+	// {
+	// 	runningThread -> returnValuePtr = value_ptr;
+	// }
+	runningThread -> returnValuePtr = value_ptr;
+
 	// Deallocated any dynamic memory created when starting this thread
 
+
+	runningThread -> threadStatus = EXITED;
 	// YOUR CODE HERE
 };
 
@@ -141,7 +239,34 @@ void mypthread_exit(void *value_ptr) {
 int mypthread_join(mypthread_t thread, void **value_ptr) {
 
 	// wait for a specific thread to terminate
+
+	// if (*(runningThread -> threadID) == thread && runningThread -> threadStatus == EXITED)
+
+	// Look for the thread in the threadList.
+	tcb * controlBlock = threadListSearch(allThreads, &thread);
+
+	// If the given thread is not in the threadList, it must have already terminated.
+	if (controlBlock == NULL)
+	{
+		return 0;
+	}
+
+	// Block until the given thread termiantes.
+	while (controlBlock -> threadStatus != EXITED)
+	{
+		continue;
+	}
+
+	if (value_ptr != NULL)
+	{
+		*(value_ptr) = runningThread -> returnValuePtr;
+	}
+
 	// de-allocate any dynamic memory created by the joining thread
+	threadListRemove(allThreads, controlBlock);
+	free(controlBlock -> threadStack);
+	free(controlBlock -> threadContext);
+	free(controlBlock);
 
 	// YOUR CODE HERE
 	return 0;

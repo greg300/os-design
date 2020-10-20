@@ -16,6 +16,7 @@
 #define READY 0
 #define SCHEDULED 1
 #define BLOCKED 2
+#define EXITED 3
 
 /* include lib header files that you need here: */
 #include <unistd.h>
@@ -35,6 +36,7 @@ typedef struct threadControlBlock {
 	ucontext_t * threadContext;  // thread context
 	stack_t * threadStack;  // thread stack
 	// thread priority
+	void * returnValuePtr;  // return value
 	// And more ...
 
 	// YOUR CODE HERE
@@ -52,31 +54,48 @@ typedef struct mypthread_mutex_t {
 
 // YOUR CODE HERE
 
-// Linked List node, representing an item in the queue.
-typedef struct queueNode {
+// Linked List node, representing a TCB of a thread in the runqueue or in the list of created threads.
+typedef struct node {
 	tcb * threadControlBlock;
-	struct queueNode * next;
-} queueNode;
+	struct node * next;
+} node;
 
 // The runqueue for created threads.
 typedef struct runqueue {
-	queueNode * front;
-	queueNode * rear;
+	node * front;
+	node * rear;
 } runqueue;
+
+// The Linked List of all created threads.
+typedef struct threadList {
+	node * front;
+} threadList;
 
 /* Function Declarations: */
 
 /* Create a new Linked List node. */
-queueNode * newQueueNode(tcb * threadControlBlock);
+node * newNode(tcb * threadControlBlock);
 
 /* Create a new, empty runqueue. */
 runqueue * runqueueCreate();
 
+/* Create a new, empty threadList. */
+threadList * threadListCreate();
+
 /* Add a thread to the runqueue. */
 void runqueueEnqueue(runqueue * queue, tcb * threadControlBlock);
 
+/* Add a thread to the beginning of the threadList. */
+void threadListAdd(threadList * threads, tcb * threadControlBlock);
+
 /* Remove a thread from the runqueue. */
 void runqueueDequeue(runqueue * queue);
+
+/* Remove a thread from the threadList; return 1 if found, 0 if not. */
+int threadListRemove(threadList * threads, tcb * threadControlBlock);
+
+/* Search for a thread by threadID; return TCB if found, NULL if not. */
+tcb * threadListSearch(threadList * threads, mypthread_t * thread);
 
 /* create a new thread */
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr, void
