@@ -222,6 +222,8 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		mainControlBlock -> threadStatus = READY;
 		mainControlBlock -> threadContext = &mainContext;
 		mainControlBlock -> threadStack = &(mainControlBlock -> threadContext -> uc_stack);
+
+		runningThread = mainControlBlock;
 	}
 	else
 	{
@@ -336,7 +338,7 @@ int mypthread_mutex_init(mypthread_mutex_t *mutex,
 	//initialize data structures for this mutex
 	mutex -> isLocked = 0;
 	// Initialize a list for any threads that may be waiting on this mutex.
-	mutex -> waitingThreads = (threadList *) malloc(sizeof(threadList));
+	mutex -> waitingThreads = threadListCreate();
 
 	// YOUR CODE HERE
 	return 0;
@@ -429,10 +431,13 @@ int mypthread_mutex_destroy(mypthread_mutex_t *mutex) {
 void timeSigHandler(int sigNum)
 {
 	// Increment time quantums elapsed for running thread.
-	runningThread -> timeQuantumsPassed++;
+	if (runningThread != NULL)
+	{
+		runningThread -> timeQuantumsPassed++;
 
-	printf("Quantum passed, swapping into scheduler...\n");
-	swapcontext(runningThread -> threadContext, &schedulerContext);
+		printf("Quantum passed, swapping into scheduler...\n");
+		swapcontext(runningThread -> threadContext, &schedulerContext);
+	}
 }
 
 void timerSetup()

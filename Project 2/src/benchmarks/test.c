@@ -29,24 +29,35 @@ void sigHandler(int sigNum, siginfo_t * siginfo, void * context)
 
 int main(int argc, char **argv) {
 
-	struct sigaction act;
-	memset(&act, '\0', sizeof(act));
+	threadList * thrds = threadListCreate();
+	tcb * t1 = (tcb *) malloc(sizeof(tcb));
+	tcb * t2 = (tcb *) malloc(sizeof(tcb));
+	tcb * t3 = (tcb *) malloc(sizeof(tcb));
+	tcb * t4 = (tcb *) malloc(sizeof(tcb));
+	threadListAdd(thrds, t1);
+	threadListAdd(thrds, t2);
+	threadListAdd(thrds, t3);
+	threadListAdd(thrds, t4);
+	threadListDestroy(thrds);
 
-	act.sa_sigaction = &sigHandler;
-	act.sa_flags = SA_SIGINFO;
+	// struct sigaction act;
+	// memset(&act, '\0', sizeof(act));
 
-	sigaction(SIGALRM, &act, NULL);  // ITIMER_VIRTUAL: decrements only when the process is executing, and delivers SIGVTALRM upon expiration.
+	// act.sa_sigaction = &sigHandler;
+	// act.sa_flags = SA_SIGINFO;
+
+	// sigaction(SIGALRM, &act, NULL);  // ITIMER_VIRTUAL: decrements only when the process is executing, and delivers SIGVTALRM upon expiration.
 	
-	struct itimerval time;
-	time.it_value.tv_sec = 1;
-	time.it_value.tv_usec = 0;
-	time.it_interval = time.it_value;
+	// struct itimerval time;
+	// time.it_value.tv_sec = 1;
+	// time.it_value.tv_usec = 0;
+	// time.it_interval = time.it_value;
 
-	setitimer(ITIMER_REAL, &time, NULL);
+	// setitimer(ITIMER_REAL, &time, NULL);
 
-	sleep(3);
-	sleep(3);
-	sleep(3);
+	// sleep(3);
+	// sleep(3);
+	// sleep(3);
 
 	//setitimer(ITIMER_REAL, &time, NULL);
 
