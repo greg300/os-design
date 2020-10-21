@@ -18,6 +18,9 @@
 #define BLOCKED 2
 #define EXITED 3
 
+#define STACK_SIZE 8192
+#define QUANTUM 5  // in ms
+
 /* include lib header files that you need here: */
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -26,6 +29,8 @@
 #include <stdlib.h>
 #include <ucontext.h>
 #include <signal.h>
+#include <sys/time.h>
+#include <string.h>
 
 typedef uint mypthread_t;
 
@@ -35,24 +40,13 @@ typedef struct threadControlBlock {
 	int threadStatus;  // thread status
 	ucontext_t * threadContext;  // thread context
 	stack_t * threadStack;  // thread stack
+	int timeQuantumsPassed;  // Number of time quantums passed since thread start.
 	// thread priority
 	void * returnValuePtr;  // return value
 	// And more ...
 
 	// YOUR CODE HERE
 } tcb;
-
-/* mutex struct definition */
-typedef struct mypthread_mutex_t {
-	/* add something here */
-
-	// YOUR CODE HERE
-} mypthread_mutex_t;
-
-/* define your data structures here: */
-// Feel free to add your own auxiliary data structures (linked list or queue etc...)
-
-// YOUR CODE HERE
 
 // Linked List node, representing a TCB of a thread in the runqueue or in the list of created threads.
 typedef struct node {
@@ -66,10 +60,24 @@ typedef struct runqueue {
 	node * rear;
 } runqueue;
 
-// The Linked List of all created threads.
+// A Linked List of created threads.
 typedef struct threadList {
 	node * front;
 } threadList;
+
+/* mutex struct definition */
+typedef struct mypthread_mutex_t {
+	/* add something here */
+	int isLocked;
+	tcb * lockingThread;
+	threadList * waitingThreads;
+	// YOUR CODE HERE
+} mypthread_mutex_t;
+
+/* define your data structures here: */
+// Feel free to add your own auxiliary data structures (linked list or queue etc...)
+
+// YOUR CODE HERE
 
 /* Function Declarations: */
 
@@ -97,6 +105,9 @@ int threadListRemove(threadList * threads, tcb * threadControlBlock);
 /* Search for a thread by threadID; return TCB if found, NULL if not. */
 tcb * threadListSearch(threadList * threads, mypthread_t * thread);
 
+/* Free each node in the list. */
+void threadListDestroy(threadList * threads);
+
 /* create a new thread */
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr, void
     *(*function)(void*), void * arg);
@@ -122,6 +133,19 @@ int mypthread_mutex_unlock(mypthread_mutex_t *mutex);
 
 /* destroy the mutex */
 int mypthread_mutex_destroy(mypthread_mutex_t *mutex);
+
+void timerSetup();
+
+void timeSigHandler(int sigNum, siginfo_t * siginfo, void * context);
+
+/* scheduler */
+static void schedule();
+
+/* Preemptive SJF (STCF) scheduling algorithm */
+static void sched_stcf();
+
+/* Preemptive MLFQ scheduling algorithm */
+static void sched_mlfq();
 
 #ifdef USE_MYTHREAD
 #define pthread_t mypthread_t

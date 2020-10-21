@@ -12,14 +12,17 @@
 #include <stdlib.h>
 #include <ucontext.h>
 #include <signal.h>
+#include <sys/time.h>
+#include <string.h>
 
 // INITAILIZE ALL YOUR VARIABLES HERE
 // YOUR CODE HERE
 int threadsCreated = 0;
-ucontext_t mainContext;
+ucontext_t * schedulerContext;
 runqueue * threadRunqueue;
 threadList * allThreads;
 tcb * runningThread;
+struct itimerval timer;
 
 /* Create a new Linked List node. */
 node * newNode(tcb * threadControlBlock)
@@ -160,29 +163,55 @@ tcb * threadListSearch(threadList * threads, mypthread_t * thread)
 	return NULL;
 }
 
+/* Free each node in the list. */
+void threadListDestroy(threadList * threads)
+{
+	node * current = threads -> front;
+	node * next;
+
+	while (current != NULL)
+	{
+		next = current -> next;
+		free(current);
+		current = next;
+	}
+
+	threads -> front = NULL;
+}
+
 /* create a new thread */
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
                       void *(*function)(void*), void * arg)
 {
 	// If this is the first thread being created, create a runqueue and threadList.
-	if (threadsCreated == 0)
+	if (__atomic_test_and_set((void *) &(threadsCreated), 0) == 0)
 	{
 		threadRunqueue = runqueueCreate();
 		allThreads = threadListCreate();
+		timerSetup();
 	}
+	else
+	{
+		threadsCreated++;
+	}
+	
 	// create Thread Control Block
 	tcb * controlBlock = (tcb *) malloc(sizeof(tcb));
 	controlBlock -> threadID = thread;
+	controlBlock -> timeQuantumsPassed = 0;
 	controlBlock -> threadStatus = READY;
 
 	// create and initialize the context of this thread
 	ucontext_t * newContext = (ucontext_t *) malloc(sizeof(ucontext_t));
-	newContext -> uc_link = &mainContext;
+	ucontext_t * mainContext = (ucontext_t *) malloc(sizeof(ucontext_t));
+	newContext -> uc_link = mainContext;
 	
 	controlBlock -> threadContext = newContext;
 
 	// allocate space of stack for this thread to run
 	stack_t * newContextStack = (stack_t *) malloc(sizeof(stack_t));
+	newContextStack -> ss_sp = malloc(STACK_SIZE);
+	newContextStack -> ss_size = STACK_SIZE;
 	newContext -> uc_stack = *newContextStack;
 
 	controlBlock -> threadStack = newContextStack;
@@ -193,18 +222,14 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	threadListAdd(allThreads, controlBlock);
 
 	// YOUR CODE HERE
-	threadsCreated++;
-	// If this is the first thread being created, get the context of this thread.
-	if (threadsCreated == 1)
-	{
-		getcontext(&mainContext);
-	}
+	getcontext(mainContext);
+
     return 0;
 };
 
 /* give CPU possession to other user-level threads voluntarily */
-int mypthread_yield() {
-
+int mypthread_yield()
+{
 	// change thread state from Running to Ready
 	runningThread -> threadStatus = READY;
 
@@ -212,14 +237,16 @@ int mypthread_yield() {
 	//getcontext(runningThread -> threadContext);
 
 	// wwitch from thread context to scheduler context
-	swapcontext(runningThread -> threadContext, &mainContext);
+	//swapcontext(runningThread -> threadContext, &mainContext);
+	swapcontext(runningThread -> threadContext, schedulerContext);
 
 	// YOUR CODE HERE
 	return 0;
 };
 
 /* terminate a thread */
-void mypthread_exit(void *value_ptr) {
+void mypthread_exit(void *value_ptr)
+{
 	// If value_ptr is not NULL, save the return value.
 	// if (value_ptr != NULL)
 	// {
@@ -228,16 +255,15 @@ void mypthread_exit(void *value_ptr) {
 	runningThread -> returnValuePtr = value_ptr;
 
 	// Deallocated any dynamic memory created when starting this thread
-
-
+	//printf("EXITING!\n");
 	runningThread -> threadStatus = EXITED;
 	// YOUR CODE HERE
 };
 
 
 /* Wait for thread termination */
-int mypthread_join(mypthread_t thread, void **value_ptr) {
-
+int mypthread_join(mypthread_t thread, void **value_ptr)
+{
 	// wait for a specific thread to terminate
 
 	// if (*(runningThread -> threadID) == thread && runningThread -> threadStatus == EXITED)
@@ -264,7 +290,9 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
 
 	// de-allocate any dynamic memory created by the joining thread
 	threadListRemove(allThreads, controlBlock);
+	free(controlBlock -> threadStack -> ss_sp);
 	free(controlBlock -> threadStack);
+	free(controlBlock -> threadContext -> uc_link);
 	free(controlBlock -> threadContext);
 	free(controlBlock);
 
@@ -276,6 +304,9 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
 int mypthread_mutex_init(mypthread_mutex_t *mutex,
                           const pthread_mutexattr_t *mutexattr) {
 	//initialize data structures for this mutex
+	mutex -> isLocked = 0;
+	// Initialize a list for any threads that may be waiting on this mutex.
+	mutex -> waitingThreads = (threadList *) malloc(sizeof(threadList));
 
 	// YOUR CODE HERE
 	return 0;
@@ -287,7 +318,22 @@ int mypthread_mutex_lock(mypthread_mutex_t *mutex) {
         // if the mutex is acquired successfully, enter the critical section
         // if acquiring mutex fails, push current thread into block list and //
         // context switch to the scheduler thread
-
+		
+		// If the mutex is free, acquire it.
+		if (__atomic_test_and_set((void *) &(mutex -> isLocked), 0) == 0)
+		{
+			// mutex -> isLocked = 1
+			mutex -> lockingThread = runningThread;
+			return 0;
+		}
+		// Otherwise, block this thread and move to the scheduler.
+		else
+		{
+			runningThread -> threadStatus = BLOCKED;
+			threadListAdd(mutex -> waitingThreads, runningThread); 
+			swapcontext(runningThread -> threadContext, schedulerContext);
+		}
+		
         // YOUR CODE HERE
         return 0;
 };
@@ -298,6 +344,21 @@ int mypthread_mutex_unlock(mypthread_mutex_t *mutex) {
 	// Put threads in block list to run queue
 	// so that they could compete for mutex later.
 
+	mutex -> isLocked = 0;
+	mutex -> lockingThread = NULL;
+
+	// Add all blocked threads to the runqueue.
+	node * current = mutex -> waitingThreads -> front;
+	while (current != NULL)
+	{
+		current -> threadControlBlock -> threadStatus = READY;
+		runqueueEnqueue(threadRunqueue, current -> threadControlBlock);
+		current = current -> next;
+	}
+
+	// Remove all threads from the mutex's block list.
+	threadListDestroy(mutex -> waitingThreads);
+
 	// YOUR CODE HERE
 	return 0;
 };
@@ -307,8 +368,50 @@ int mypthread_mutex_unlock(mypthread_mutex_t *mutex) {
 int mypthread_mutex_destroy(mypthread_mutex_t *mutex) {
 	// Deallocate dynamic memory created in mypthread_mutex_init
 
+	// Remove all threads from the mutex's block list. (Should already be empty.)
+	threadListDestroy(mutex -> waitingThreads);
+	free(mutex -> waitingThreads);
 	return 0;
 };
+
+// void incrementTimeQuantums()
+// {
+// 	node * current = allThreads -> front;
+
+// 	while (current != NULL)
+// 	{
+// 		if (current -> threadControlBlock -> threadStatus)
+// 		current -> threadControlBlock -> timeQuantumsPassed++;
+// 		current = current -> next;
+// 	}
+// }
+
+void timerSetup()
+{
+	struct sigaction act;
+	memset(&act, '\0', sizeof(act));
+
+	act.sa_sigaction = &timeSigHandler;
+	act.sa_flags = SA_SIGINFO;
+
+	sigaction(SIGALRM, &act, NULL);  // ITIMER_VIRTUAL: decrements only when the process is executing, and delivers SIGVTALRM upon expiration.
+
+	timer.it_interval.tv_sec = QUANTUM / 1000;
+	timer.it_interval.tv_usec = (QUANTUM * 1000) % 1000000;
+
+	setitimer(ITIMER_REAL, &timer, NULL);
+	
+	//act.sa_handler = timeSigHandler;
+	//sigemptyset(&act.sa_mask);
+}
+
+void timeSigHandler(int sigNum, siginfo_t * siginfo, void * context)
+{
+	// Increment time quantums elapsed for running thread.
+	runningThread -> timeQuantumsPassed++;
+
+	swapcontext(runningThread -> threadContext, schedulerContext);
+}
 
 /* scheduler */
 static void schedule() {
@@ -316,11 +419,21 @@ static void schedule() {
 	// should be contexted switched from thread context to this
 	// schedule function
 
+	// Freeze the timer.
+	timer.it_value.tv_sec = 0;
+	timer.it_value.tv_usec = 0;
+
+	if (schedulerContext == NULL)
+	{
+		getcontext(schedulerContext);
+	}
+
+
 	// Invoke different actual scheduling algorithms
 	// according to policy (STCF or MLFQ)
 
 	// if (sched == STCF)
-	//		sched_stcf();
+	// 		sched_stcf();
 	// else if (sched == MLFQ)
 	// 		sched_mlfq();
 
@@ -329,16 +442,25 @@ static void schedule() {
 // schedule policy
 #ifndef MLFQ
 	// Choose STCF
+	sched_stcf();
 #else
 	// Choose MLFQ
+	sched_mlfq();
 #endif
+	// Un-freeze the timer.
+	timer.it_value.tv_sec = 0;
+	timer.it_value.tv_usec = 0;
 
+	// Context switch into the next thread to run.
+	setcontext(runningThread -> threadContext);
 }
 
 /* Preemptive SJF (STCF) scheduling algorithm */
 static void sched_stcf() {
 	// Your own implementation of STCF
 	// (feel free to modify arguments and return types)
+
+	runningThread = runningThread;
 
 	// YOUR CODE HERE
 }
