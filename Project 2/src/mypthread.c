@@ -18,11 +18,14 @@
 // INITAILIZE ALL YOUR VARIABLES HERE
 // YOUR CODE HERE
 int threadsCreated = 0;
-ucontext_t * schedulerContext;
-runqueue * threadRunqueue;
+ucontext_t schedulerContext;
+ucontext_t mainContext;
+threadList * threadRunqueue;
 threadList * allThreads;
 tcb * runningThread;
+tcb * mainThread;
 struct itimerval timer;
+struct sigaction timerAction;
 
 /* Create a new Linked List node. */
 node * newNode(tcb * threadControlBlock)
@@ -182,19 +185,7 @@ void threadListDestroy(threadList * threads)
 /* create a new thread */
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
                       void *(*function)(void*), void * arg)
-{
-	// If this is the first thread being created, create a runqueue and threadList.
-	if (__atomic_test_and_set((void *) &(threadsCreated), 0) == 0)
-	{
-		threadRunqueue = runqueueCreate();
-		allThreads = threadListCreate();
-		timerSetup();
-	}
-	else
-	{
-		threadsCreated++;
-	}
-	
+{	
 	// create Thread Control Block
 	tcb * controlBlock = (tcb *) malloc(sizeof(tcb));
 	controlBlock -> threadID = thread;
@@ -203,8 +194,8 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 
 	// create and initialize the context of this thread
 	ucontext_t * newContext = (ucontext_t *) malloc(sizeof(ucontext_t));
-	ucontext_t * mainContext = (ucontext_t *) malloc(sizeof(ucontext_t));
-	newContext -> uc_link = mainContext;
+	// ucontext_t * originalContext = (ucontext_t *) malloc(sizeof(ucontext_t));
+	// newContext -> uc_link = originalContext;
 	
 	controlBlock -> threadContext = newContext;
 
@@ -216,13 +207,37 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 
 	controlBlock -> threadStack = newContextStack;
 
+	// If this is the first thread being created, do some initialization.
+	if (__atomic_test_and_set((void *) &(threadsCreated), 0) == 0)
+	{
+		threadRunqueue = threadListCreate();
+		allThreads = threadListCreate();
+		timerSetup();
+		schedule(1);
+
+		// Create an extra thread for the main program.
+		tcb * mainControlBlock = (tcb *) malloc(sizeof(tcb));
+		mainControlBlock -> threadID = thread + 1;
+		mainControlBlock -> timeQuantumsPassed = 0;
+		mainControlBlock -> threadStatus = READY;
+		mainControlBlock -> threadContext = &mainContext;
+		mainControlBlock -> threadStack = &(mainControlBlock -> threadContext -> uc_stack);
+	}
+	else
+	{
+		//printf("Incrementing thread counter\n");
+		threadsCreated++;
+	}
+	printf("Created thread %d\n", threadsCreated);
+
 	// after everything is all set, push this thread int
 	makecontext(newContext, (void (*)()) function, 1, arg);
-	runqueueEnqueue(threadRunqueue, controlBlock);
+	threadListAdd(threadRunqueue, controlBlock);
 	threadListAdd(allThreads, controlBlock);
 
 	// YOUR CODE HERE
-	getcontext(mainContext);
+	newContext -> uc_link = &mainContext;
+	getcontext(&mainContext);
 
     return 0;
 };
@@ -238,7 +253,7 @@ int mypthread_yield()
 
 	// wwitch from thread context to scheduler context
 	//swapcontext(runningThread -> threadContext, &mainContext);
-	swapcontext(runningThread -> threadContext, schedulerContext);
+	swapcontext(runningThread -> threadContext, &schedulerContext);
 
 	// YOUR CODE HERE
 	return 0;
@@ -253,6 +268,18 @@ void mypthread_exit(void *value_ptr)
 	// 	runningThread -> returnValuePtr = value_ptr;
 	// }
 	runningThread -> returnValuePtr = value_ptr;
+	
+	// If a thread was waiting to join on this runningThread, unblock the waiting thread.
+	node * current = allThreads -> front;
+	while (current != NULL)
+	{
+		if (runningThread -> threadWaitingToJoin == current -> threadControlBlock -> threadID)
+		{
+			current -> threadControlBlock -> threadStatus = READY;
+			break;
+		}
+		current = current -> next;
+	}
 
 	// Deallocated any dynamic memory created when starting this thread
 	//printf("EXITING!\n");
@@ -277,10 +304,13 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 		return 0;
 	}
 
-	// Block until the given thread termiantes.
-	while (controlBlock -> threadStatus != EXITED)
+	// Block until the given thread terminates.
+	if (controlBlock -> threadStatus != EXITED)
 	{
-		continue;
+		runningThread -> threadStatus = BLOCKED;
+		threadListRemove(threadRunqueue, runningThread);
+		controlBlock -> threadWaitingToJoin = runningThread -> threadID;
+		swapcontext(runningThread -> threadContext, &schedulerContext);
 	}
 
 	if (value_ptr != NULL)
@@ -292,7 +322,7 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 	threadListRemove(allThreads, controlBlock);
 	free(controlBlock -> threadStack -> ss_sp);
 	free(controlBlock -> threadStack);
-	free(controlBlock -> threadContext -> uc_link);
+	//free(controlBlock -> threadContext -> uc_link);
 	free(controlBlock -> threadContext);
 	free(controlBlock);
 
@@ -330,8 +360,9 @@ int mypthread_mutex_lock(mypthread_mutex_t *mutex) {
 		else
 		{
 			runningThread -> threadStatus = BLOCKED;
+			threadListRemove(threadRunqueue, runningThread);
 			threadListAdd(mutex -> waitingThreads, runningThread); 
-			swapcontext(runningThread -> threadContext, schedulerContext);
+			swapcontext(runningThread -> threadContext, &schedulerContext);
 		}
 		
         // YOUR CODE HERE
@@ -352,7 +383,7 @@ int mypthread_mutex_unlock(mypthread_mutex_t *mutex) {
 	while (current != NULL)
 	{
 		current -> threadControlBlock -> threadStatus = READY;
-		runqueueEnqueue(threadRunqueue, current -> threadControlBlock);
+		threadListAdd(threadRunqueue, current -> threadControlBlock);
 		current = current -> next;
 	}
 
@@ -386,35 +417,48 @@ int mypthread_mutex_destroy(mypthread_mutex_t *mutex) {
 // 	}
 // }
 
+// void timeSigHandler(int sigNum, siginfo_t * siginfo, void * context)
+// {
+// 	// Increment time quantums elapsed for running thread.
+// 	runningThread -> timeQuantumsPassed++;
+
+// 	printf("Quantum passed, swapping into scheduler...\n");
+// 	swapcontext(runningThread -> threadContext, &schedulerContext);
+// }
+
+void timeSigHandler(int sigNum)
+{
+	// Increment time quantums elapsed for running thread.
+	runningThread -> timeQuantumsPassed++;
+
+	printf("Quantum passed, swapping into scheduler...\n");
+	swapcontext(runningThread -> threadContext, &schedulerContext);
+}
+
 void timerSetup()
 {
-	struct sigaction act;
-	memset(&act, '\0', sizeof(act));
+	// memset(&timerAction, '\0', sizeof(timerAction));
+	// timerAction.sa_sigaction = &timeSigHandler;
+	// timerAction.sa_flags = SA_SIGINFO;
+	timerAction.sa_handler = timeSigHandler;
+	sigemptyset(&timerAction.sa_mask);
+	timerAction.sa_flags = 0;
 
-	act.sa_sigaction = &timeSigHandler;
-	act.sa_flags = SA_SIGINFO;
-
-	sigaction(SIGALRM, &act, NULL);  // ITIMER_VIRTUAL: decrements only when the process is executing, and delivers SIGVTALRM upon expiration.
+	sigaction(SIGPROF, &timerAction, NULL); 
 
 	timer.it_interval.tv_sec = QUANTUM / 1000;
 	timer.it_interval.tv_usec = (QUANTUM * 1000) % 1000000;
 
-	setitimer(ITIMER_REAL, &timer, NULL);
+	timer.it_value = timer.it_interval;
+
+	setitimer(ITIMER_PROF, &timer, NULL);
 	
 	//act.sa_handler = timeSigHandler;
 	//sigemptyset(&act.sa_mask);
 }
 
-void timeSigHandler(int sigNum, siginfo_t * siginfo, void * context)
-{
-	// Increment time quantums elapsed for running thread.
-	runningThread -> timeQuantumsPassed++;
-
-	swapcontext(runningThread -> threadContext, schedulerContext);
-}
-
 /* scheduler */
-static void schedule() {
+static void schedule(int isFirstCall) {
 	// Every time when timer interrup happens, your thread library
 	// should be contexted switched from thread context to this
 	// schedule function
@@ -423,9 +467,16 @@ static void schedule() {
 	timer.it_value.tv_sec = 0;
 	timer.it_value.tv_usec = 0;
 
-	if (schedulerContext == NULL)
+	// The first time, just get the scheduler context.
+	if (isFirstCall)
 	{
-		getcontext(schedulerContext);
+		printf("Got scheduler context.\n");
+		getcontext(&schedulerContext);
+
+		// Un-freeze the timer.
+		timer.it_value = timer.it_interval;
+
+		return;
 	}
 
 
@@ -448,11 +499,20 @@ static void schedule() {
 	sched_mlfq();
 #endif
 	// Un-freeze the timer.
-	timer.it_value.tv_sec = 0;
-	timer.it_value.tv_usec = 0;
+	timer.it_value = timer.it_interval;
 
 	// Context switch into the next thread to run.
-	setcontext(runningThread -> threadContext);
+	if (runningThread != NULL)
+	{
+		setcontext(runningThread -> threadContext);
+	}
+	else
+	{
+		//printf("No running thread.\n");
+		setcontext(&mainContext);
+		//exit(0);
+	}
+	
 }
 
 /* Preemptive SJF (STCF) scheduling algorithm */
@@ -460,7 +520,51 @@ static void sched_stcf() {
 	// Your own implementation of STCF
 	// (feel free to modify arguments and return types)
 
-	runningThread = runningThread;
+	node * current;
+	// Add any threads that are "ready" to the runqueue.
+	current = allThreads -> front;
+	while (current != NULL)
+	{
+		if (current -> threadControlBlock -> threadStatus == READY)
+		{
+			threadListAdd(threadRunqueue, current -> threadControlBlock);
+		}
+	}
+
+	// If a thread was previously running, add it back to the runqueue.
+	if (runningThread != NULL)
+	{
+		runningThread -> threadStatus = READY;
+		threadListAdd(threadRunqueue, runningThread);
+	}
+
+	current = threadRunqueue -> front;
+
+	// If runqueue is empty, do nothing and stay in current thread.
+	if (current == NULL)
+	{
+		return;
+	}
+
+	// Find the thread with least number of elapsed time quantums.
+	int minTimeQuantums = current -> threadControlBlock -> timeQuantumsPassed;
+	tcb * minTimeQuantumTCB = current -> threadControlBlock;
+	while (current != NULL)
+	{
+		if (current -> threadControlBlock -> timeQuantumsPassed < minTimeQuantums)
+		{
+			if (current -> threadControlBlock -> threadStatus == SCHEDULED)
+			{
+				minTimeQuantums = current -> threadControlBlock -> timeQuantumsPassed;
+				minTimeQuantumTCB = current -> threadControlBlock;
+			}
+		}
+		current = current -> next;
+	}
+
+	runningThread = minTimeQuantumTCB;
+	runningThread -> threadStatus = SCHEDULED;
+	threadListRemove(threadRunqueue, runningThread);
 
 	// YOUR CODE HERE
 }

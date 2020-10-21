@@ -41,6 +41,7 @@ typedef struct threadControlBlock {
 	ucontext_t * threadContext;  // thread context
 	stack_t * threadStack;  // thread stack
 	int timeQuantumsPassed;  // Number of time quantums passed since thread start.
+	mypthread_t * threadWaitingToJoin;
 	// thread priority
 	void * returnValuePtr;  // return value
 	// And more ...
@@ -134,12 +135,13 @@ int mypthread_mutex_unlock(mypthread_mutex_t *mutex);
 /* destroy the mutex */
 int mypthread_mutex_destroy(mypthread_mutex_t *mutex);
 
+//void timeSigHandler(int sigNum, siginfo_t * siginfo, void * context);
+void timeSigHandler(int sigNum);
+
 void timerSetup();
 
-void timeSigHandler(int sigNum, siginfo_t * siginfo, void * context);
-
 /* scheduler */
-static void schedule();
+static void schedule(int isFirstCall);
 
 /* Preemptive SJF (STCF) scheduling algorithm */
 static void sched_stcf();
