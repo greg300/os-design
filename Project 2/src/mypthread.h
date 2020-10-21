@@ -141,7 +141,7 @@ void timeSigHandler(int sigNum);
 void timerSetup();
 
 /* scheduler */
-static void schedule(int isFirstCall);
+static void schedule();
 
 /* Preemptive SJF (STCF) scheduling algorithm */
 static void sched_stcf();

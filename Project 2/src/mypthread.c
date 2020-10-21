@@ -213,7 +213,6 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		threadRunqueue = threadListCreate();
 		allThreads = threadListCreate();
 		timerSetup();
-		schedule(1);
 
 		// Create an extra thread for the main program.
 		tcb * mainControlBlock = (tcb *) malloc(sizeof(tcb));
@@ -224,6 +223,14 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		mainControlBlock -> threadStack = &(mainControlBlock -> threadContext -> uc_stack);
 
 		runningThread = mainControlBlock;
+
+		// Create a context for the scheduler.
+		stack_t * schedulerContextStack = (stack_t *) malloc(sizeof(stack_t));
+		schedulerContextStack -> ss_sp = malloc(STACK_SIZE);
+		schedulerContextStack -> ss_size = STACK_SIZE;
+		schedulerContext.uc_stack = *schedulerContextStack;
+
+		makecontext(&schedulerContext, schedule, 0);
 	}
 	else
 	{
@@ -463,7 +470,7 @@ void timerSetup()
 }
 
 /* scheduler */
-static void schedule(int isFirstCall) {
+static void schedule() {
 	// Every time when timer interrup happens, your thread library
 	// should be contexted switched from thread context to this
 	// schedule function
@@ -471,14 +478,6 @@ static void schedule(int isFirstCall) {
 	// Freeze the timer.
 	timer.it_value.tv_sec = 0;
 	timer.it_value.tv_usec = 0;
-
-	// The first time, just get the scheduler context.
-	if (isFirstCall)
-	{
-		printf("Got scheduler context.\n");
-		getcontext(&schedulerContext);
-	}
-
 
 	// Invoke different actual scheduling algorithms
 	// according to policy (STCF or MLFQ)
