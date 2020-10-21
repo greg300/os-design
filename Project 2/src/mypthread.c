@@ -472,11 +472,6 @@ static void schedule(int isFirstCall) {
 	{
 		printf("Got scheduler context.\n");
 		getcontext(&schedulerContext);
-
-		// Un-freeze the timer.
-		timer.it_value = timer.it_interval;
-
-		return;
 	}
 
 
@@ -508,8 +503,9 @@ static void schedule(int isFirstCall) {
 	}
 	else
 	{
+		return;
 		//printf("No running thread.\n");
-		setcontext(&mainContext);
+		//setcontext(&mainContext);
 		//exit(0);
 	}
 	
