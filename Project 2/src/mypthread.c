@@ -229,7 +229,9 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		schedulerContextStack -> ss_sp = malloc(STACK_SIZE);
 		schedulerContextStack -> ss_size = STACK_SIZE;
 		schedulerContext.uc_stack = *schedulerContextStack;
+		schedulerContext.uc_link = &mainContext;
 
+		getcontext(&mainContext);
 		makecontext(&schedulerContext, schedule, 0);
 	}
 	else
@@ -240,12 +242,14 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	printf("Created thread %d\n", threadsCreated);
 
 	// after everything is all set, push this thread int
-	makecontext(newContext, (void (*)()) function, 1, arg);
 	threadListAdd(threadRunqueue, controlBlock);
 	threadListAdd(allThreads, controlBlock);
 
 	// YOUR CODE HERE
 	newContext -> uc_link = &mainContext;
+	getcontext(&mainContext);
+	makecontext(newContext, (void (*)()) function, 1, arg);
+
 	getcontext(&mainContext);
 
     return 0;
