@@ -190,7 +190,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	printf("Creating thread #%d with ID %u...\n", threadsCreated, *thread);
 	// create Thread Control Block
 	tcb * controlBlock = (tcb *) malloc(sizeof(tcb));
-	controlBlock -> threadID = *thread;
+	controlBlock -> threadID = *thread + threadsCreated;
 	controlBlock -> timeQuantumsPassed = 0;
 	controlBlock -> threadStatus = READY;
 
@@ -598,7 +598,7 @@ static void sched_stcf() {
 	{
 		if (current -> threadControlBlock -> timeQuantumsPassed < minTimeQuantums)
 		{
-			if (current -> threadControlBlock -> threadStatus == SCHEDULED)
+			if (current -> threadControlBlock -> threadStatus == READY)
 			{
 				minTimeQuantums = current -> threadControlBlock -> timeQuantumsPassed;
 				minTimeQuantumTCB = current -> threadControlBlock;
