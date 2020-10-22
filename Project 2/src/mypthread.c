@@ -187,7 +187,7 @@ void threadListDestroy(threadList * threads)
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
                       void *(*function)(void*), void * arg)
 {	
-	printf("Creating thread #%d with ID %u...\n", threadsCreated, *thread);
+	printf("Creating thread #%d with ID %u...\n", threadsCreated, *thread + threadsCreated);
 	// create Thread Control Block
 	tcb * controlBlock = (tcb *) malloc(sizeof(tcb));
 	controlBlock -> threadID = *thread + threadsCreated;
@@ -576,11 +576,14 @@ static void sched_stcf() {
 		current = current -> next;
 	}
 
-	// If a thread was previously running, add it back to the runqueue.
+	// If a thread was previously running and was not blocking, add it back to the runqueue.
 	if (runningThread != NULL)
 	{
-		runningThread -> threadStatus = READY;
-		threadListAdd(threadRunqueue, runningThread);
+		if (runningThread -> threadStatus != BLOCKED)
+		{
+			runningThread -> threadStatus = READY;
+			threadListAdd(threadRunqueue, runningThread);
+		}
 	}
 
 	current = threadRunqueue -> front;
