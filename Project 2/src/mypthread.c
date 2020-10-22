@@ -18,8 +18,8 @@
 // INITAILIZE ALL YOUR VARIABLES HERE
 // YOUR CODE HERE
 int threadsCreated = 0;
-ucontext_t schedulerContext;
-ucontext_t mainContext;
+ucontext_t schedulerContext, * scp;
+ucontext_t mainContext, * mcp;
 threadList * threadRunqueue;
 threadList * allThreads;
 tcb * runningThread;
@@ -224,7 +224,14 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 
 		runningThread = mainControlBlock;
 
+		// Create a main context.
+		mcp = (ucontext_t *) malloc(sizeof(ucontext_t));
+		mainContext = *mcp;
+
 		// Create a context for the scheduler.
+		scp = (ucontext_t *) malloc(sizeof(ucontext_t));
+		schedulerContext = *scp;
+
 		stack_t * schedulerContextStack = (stack_t *) malloc(sizeof(stack_t));
 		schedulerContextStack -> ss_sp = malloc(STACK_SIZE);
 		schedulerContextStack -> ss_size = STACK_SIZE;
@@ -511,10 +518,10 @@ static void schedule() {
 	}
 	else
 	{
-		return;
 		//printf("No running thread.\n");
 		//setcontext(&mainContext);
 		//exit(0);
+		return;
 	}
 	
 }
