@@ -320,6 +320,9 @@ void mypthread_exit(void *value_ptr)
 	else
 		printf("Main thread exiting.\n");
 	runningThread -> threadStatus = EXITED;
+
+	runningThread -> timeQuantumsPassed++;
+	swapcontext(runningThread -> threadContext, &schedulerContext);
 	// YOUR CODE HERE
 };
 
