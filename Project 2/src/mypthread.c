@@ -238,8 +238,8 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		schedulerContext.uc_stack = *schedulerContextStack;
 		schedulerContext.uc_link = &mainContext;
 
-		getcontext(&mainContext);
-		makecontext(&schedulerContext, schedule, 0);
+		//getcontext(&mainContext);
+		makecontext(scp, schedule, 0);
 	}
 	else
 	{
@@ -254,7 +254,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 
 	// YOUR CODE HERE
 	newContext -> uc_link = &mainContext;
-	getcontext(&mainContext);
+	//getcontext(&mainContext);
 	makecontext(newContext, (void (*)()) function, 1, arg);
 
 	getcontext(&mainContext);
@@ -267,13 +267,14 @@ int mypthread_yield()
 {
 	// change thread state from Running to Ready
 	runningThread -> threadStatus = READY;
+	runningThread -> timeQuantumsPassed++;
 
 	// save context of this thread to its thread control block
 	//getcontext(runningThread -> threadContext);
 
 	// wwitch from thread context to scheduler context
 	//swapcontext(runningThread -> threadContext, &mainContext);
-	swapcontext(runningThread -> threadContext, &schedulerContext);
+	swapcontext(runningThread -> threadContext, scp);
 
 	// YOUR CODE HERE
 	return 0;
@@ -330,7 +331,9 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 		runningThread -> threadStatus = BLOCKED;
 		threadListRemove(threadRunqueue, runningThread);
 		controlBlock -> threadWaitingToJoin = runningThread -> threadID;
-		swapcontext(runningThread -> threadContext, &schedulerContext);
+
+		runningThread -> timeQuantumsPassed++;
+		swapcontext(runningThread -> threadContext, scp);
 	}
 
 	if (value_ptr != NULL)
@@ -382,7 +385,9 @@ int mypthread_mutex_lock(mypthread_mutex_t *mutex) {
 			runningThread -> threadStatus = BLOCKED;
 			threadListRemove(threadRunqueue, runningThread);
 			threadListAdd(mutex -> waitingThreads, runningThread); 
-			swapcontext(runningThread -> threadContext, &schedulerContext);
+
+			runningThread -> timeQuantumsPassed++;
+			swapcontext(runningThread -> threadContext, scp);
 		}
 		
         // YOUR CODE HERE
@@ -454,7 +459,7 @@ void timeSigHandler(int sigNum)
 		runningThread -> timeQuantumsPassed++;
 
 		printf("Quantum passed, swapping into scheduler...\n");
-		swapcontext(runningThread -> threadContext, &schedulerContext);
+		swapcontext(runningThread -> threadContext, scp);
 	}
 }
 
