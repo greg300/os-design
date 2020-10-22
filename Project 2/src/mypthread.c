@@ -18,6 +18,7 @@
 // INITAILIZE ALL YOUR VARIABLES HERE
 // YOUR CODE HERE
 int threadsCreated = 0;
+int isFirst = 0;
 ucontext_t schedulerContext;
 ucontext_t mainContext;
 threadList * threadRunqueue;
@@ -209,7 +210,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	controlBlock -> threadStack = newContextStack;
 
 	// If this is the first thread being created, do some initialization.
-	if (__atomic_test_and_set((void *) &(threadsCreated), 0) == 0)
+	if (__atomic_test_and_set((void *) &(isFirst), 0) == 0)
 	{
 		threadRunqueue = threadListCreate();
 		allThreads = threadListCreate();
@@ -247,9 +248,9 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	else
 	{
 		//printf("Incrementing thread counter\n");
-		threadsCreated++;
 	}
 	printf("Created thread %d\n", threadsCreated);
+	threadsCreated++;
 
 	// after everything is all set, push this thread int
 	threadListAdd(threadRunqueue, controlBlock);
