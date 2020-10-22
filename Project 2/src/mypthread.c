@@ -573,6 +573,7 @@ static void sched_stcf() {
 		{
 			threadListAdd(threadRunqueue, current -> threadControlBlock);
 		}
+		current = current -> next;
 	}
 
 	// If a thread was previously running, add it back to the runqueue.
