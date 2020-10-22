@@ -10,8 +10,8 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <string.h>
-#include <pthread.h>
 #include <unistd.h>
+#include <pthread.h>
 #include "../mypthread.h"
 
 /* A scratch program template on which to call and
@@ -25,12 +25,14 @@
 pthread_mutex_t mutex;
 pthread_t * thread;
 int * counter;
+int i;
 
-ucontext_t schedulerContext;
+ucontext_t schedulerContext, mainContext;
 
 static void func1()
 {
 	printf("In func1.\n");
+	i++;
 }
 
 void vector_multiply(void* arg) {
@@ -48,18 +50,31 @@ int main(int argc, char **argv) {
 	// Create a context for the scheduler.
 	//ucontext_t * scp = (ucontext_t *) malloc(sizeof(ucontext_t));
 	//ucontext_t schedulerContext = *scp;
-	ucontext_t main;
 
-	stack_t * schedulerContextStack = (stack_t *) malloc(sizeof(stack_t));
-	schedulerContextStack -> ss_sp = malloc(STACK_SIZE);
-	schedulerContextStack -> ss_size = STACK_SIZE;
-	schedulerContext.uc_stack = *schedulerContextStack;
-	schedulerContext.uc_link = &main;
+	// stack_t * schedulerContextStack = (stack_t *) malloc(sizeof(stack_t));
+	// schedulerContextStack -> ss_sp = malloc(STACK_SIZE);
+	// schedulerContextStack -> ss_size = STACK_SIZE;
+	// schedulerContextStack -> ss_flags = 0;
+	// schedulerContext.uc_stack = *schedulerContextStack;
+	getcontext(&schedulerContext);
+	schedulerContext.uc_stack.ss_sp = malloc(STACK_SIZE);
+	schedulerContext.uc_stack.ss_size = STACK_SIZE;
+	schedulerContext.uc_stack.ss_flags = 0;
+	schedulerContext.uc_link = NULL;
 	//schedulerContext.uc_link = mcp;
-	
-	getcontext(&main);
+
+	// printf("Before getcontext\n");
+	// getcontext(&mainContext);
+	printf("Before makecontext\n");
 	makecontext(&schedulerContext, func1, 0);
-	swapcontext(&main, &schedulerContext);
+
+	// if (i == 0)
+	// {
+	// 	printf("Before setcontext\n");
+	// 	setcontext(&schedulerContext);
+	// }
+	printf("Before swapcontext\n");
+	swapcontext(&mainContext, &schedulerContext);
 
 	printf("Success.\n");
 
