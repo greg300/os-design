@@ -303,7 +303,10 @@ void mypthread_exit(void *value_ptr)
 		if (runningThread -> threadWaitingToJoin == current -> threadControlBlock -> threadID)
 		{
 			current -> threadControlBlock -> threadStatus = READY;
-			printf("On exit, thread %u unblocked thread %u which was waiting to join.\n", *(runningThread -> threadID), *(current -> threadControlBlock -> threadID));
+			if (current -> threadControlBlock -> threadID != NULL)
+				printf("On exit, thread %u unblocked thread %u which was waiting to join.\n", *(runningThread -> threadID), *(current -> threadControlBlock -> threadID));
+			else
+				printf("On exit, thread %u unblocked main thread which was waiting to join.\n", *(runningThread -> threadID));
 			break;
 		}
 		current = current -> next;
@@ -311,7 +314,10 @@ void mypthread_exit(void *value_ptr)
 
 	// Deallocated any dynamic memory created when starting this thread
 	//printf("EXITING!\n");
-	printf("Thread %u exiting.\n", *(runningThread -> threadID));
+	if (runningThread -> threadID != NULL)
+		printf("Thread %u exiting.\n", *(runningThread -> threadID));
+	else
+		printf("Main thread exiting.\n");
 	runningThread -> threadStatus = EXITED;
 	// YOUR CODE HERE
 };
@@ -321,7 +327,10 @@ void mypthread_exit(void *value_ptr)
 int mypthread_join(mypthread_t thread, void **value_ptr)
 {
 	// wait for a specific thread to terminate
-	printf("Thread %u attempting to join on thread %u.\n", *(runningThread -> threadID), thread);
+	if (runningThread -> threadID != NULL)
+		printf("Thread %u attempting to join on thread %u.\n", *(runningThread -> threadID), thread);
+	else
+		printf("Main thread attempting to join on thread %u.\n", thread);
 
 	// if (*(runningThread -> threadID) == thread && runningThread -> threadStatus == EXITED)
 
@@ -342,11 +351,18 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 		controlBlock -> threadWaitingToJoin = runningThread -> threadID;
 
 		runningThread -> timeQuantumsPassed++;
-		printf("Thread %u blocked attempting to join on thread %u.\n", *(runningThread -> threadID), thread);
+		if (runningThread -> threadID != NULL)
+			printf("Thread %u blocked attempting to join on thread %u.\n", *(runningThread -> threadID), thread);
+		else
+			printf("Main thread blocked attempting to join on thread %u.\n", thread);
 		swapcontext(runningThread -> threadContext, &schedulerContext);
 	}
 
-	printf("Thread %u done waiting to join on thread %u.\n", *(runningThread -> threadID), thread);
+	if (runningThread -> threadID != NULL)
+		printf("Thread %u done waiting to join on thread %u.\n", *(runningThread -> threadID), thread);
+	else
+		printf("Main thread done waiting to join on thread %u.\n", thread);
+
 	if (value_ptr != NULL)
 	{
 		*(value_ptr) = runningThread -> returnValuePtr;
@@ -592,7 +608,10 @@ static void sched_stcf() {
 	runningThread = minTimeQuantumTCB;
 	runningThread -> threadStatus = SCHEDULED;
 	threadListRemove(threadRunqueue, runningThread);
-	printf("Scheduler picked thread %u\n", *(runningThread -> threadID));
+	if (runningThread -> threadID != NULL)
+		printf("Scheduler picked thread %u.\n", *(runningThread -> threadID));
+	else
+		printf("Scheduler picked main thread.\n");
 
 	// YOUR CODE HERE
 }
