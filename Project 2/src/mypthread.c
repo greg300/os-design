@@ -214,29 +214,29 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		allThreads = threadListCreate();
 		timerSetup();
 
+		// Create a main context.
+		mcp = (ucontext_t *) malloc(sizeof(ucontext_t));
+		//mainContext = *mcp;
+
 		// Create an extra thread for the main program.
 		tcb * mainControlBlock = (tcb *) malloc(sizeof(tcb));
 		mainControlBlock -> threadID = thread + 1;
 		mainControlBlock -> timeQuantumsPassed = 0;
 		mainControlBlock -> threadStatus = READY;
-		mainControlBlock -> threadContext = &mainContext;
+		mainControlBlock -> threadContext = mcp;
 		mainControlBlock -> threadStack = &(mainControlBlock -> threadContext -> uc_stack);
 
 		runningThread = mainControlBlock;
 
-		// Create a main context.
-		mcp = (ucontext_t *) malloc(sizeof(ucontext_t));
-		mainContext = *mcp;
-
 		// Create a context for the scheduler.
 		scp = (ucontext_t *) malloc(sizeof(ucontext_t));
-		schedulerContext = *scp;
+		//schedulerContext = *scp;
 
 		stack_t * schedulerContextStack = (stack_t *) malloc(sizeof(stack_t));
 		schedulerContextStack -> ss_sp = malloc(STACK_SIZE);
 		schedulerContextStack -> ss_size = STACK_SIZE;
 		schedulerContext.uc_stack = *schedulerContextStack;
-		schedulerContext.uc_link = &mainContext;
+		schedulerContext.uc_link = mcp;
 
 		//getcontext(&mainContext);
 		makecontext(scp, schedule, 0);
@@ -253,11 +253,11 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	threadListAdd(allThreads, controlBlock);
 
 	// YOUR CODE HERE
-	newContext -> uc_link = &mainContext;
+	newContext -> uc_link = mcp;
 	//getcontext(&mainContext);
 	makecontext(newContext, (void (*)()) function, 1, arg);
 
-	getcontext(&mainContext);
+	getcontext(mcp);
 
     return 0;
 };
