@@ -552,6 +552,7 @@ static void schedule() {
 	// Freeze the timer.
 	timer.it_value.tv_sec = 0;
 	timer.it_value.tv_usec = 0;
+	setitimer(ITIMER_PROF, &timer, NULL);
 
 	// If there are no remaining threads except main in allThreads, tear down.
 	if (allThreadsCount == 1 && allThreads -> front -> threadControlBlock -> threadID == 0)
@@ -593,6 +594,7 @@ static void schedule() {
 #endif
 	// Un-freeze the timer.
 	timer.it_value = timer.it_interval;
+	setitimer(ITIMER_PROF, &timer, NULL);
 
 	// Context switch into the next thread to run.
 	if (runningThread != NULL)
