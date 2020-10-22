@@ -220,7 +220,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 
 		// Create an extra thread for the main program.
 		tcb * mainControlBlock = (tcb *) malloc(sizeof(tcb));
-		mainControlBlock -> threadID = thread + 1;
+		mainControlBlock -> threadID = NULL;
 		mainControlBlock -> timeQuantumsPassed = 0;
 		mainControlBlock -> threadStatus = READY;
 		mainControlBlock -> threadContext = mcp;
@@ -234,7 +234,8 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		schedulerContextStack -> ss_sp = malloc(STACK_SIZE);
 		schedulerContextStack -> ss_size = STACK_SIZE;
 		schedulerContext.uc_stack = *schedulerContextStack;
-		schedulerContext.uc_link = mcp;
+		schedulerContext.uc_link = NULL;
+		//schedulerContext.uc_link = mcp;
 
 		//getcontext(&mainContext);
 		makecontext(scp, schedule, 0);
