@@ -18,7 +18,8 @@
 #define BLOCKED 2
 #define EXITED 3
 
-#define STACK_SIZE 8192
+//#define STACK_SIZE 8192
+#define STACK_SIZE SIGSTKSZ
 #define QUANTUM 5  // in ms
 
 /* include lib header files that you need here: */
