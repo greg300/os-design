@@ -23,6 +23,7 @@ ucontext_t schedulerContext;
 ucontext_t mainContext;
 threadList * threadRunqueue;
 threadList * allThreads;
+int allThreadsCount = 0;
 tcb * runningThread;
 tcb * mainThread;
 struct itimerval timer;
@@ -248,6 +249,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		makecontext(&schedulerContext, schedule, 0);
 
 		threadListAdd(allThreads, mainControlBlock);
+		allThreadsCount++;
 		runningThread = mainControlBlock;
 	}
 	else
@@ -256,8 +258,9 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	}
 
 	// after everything is all set, push this thread int
-	threadListAdd(threadRunqueue, controlBlock);
+	//threadListAdd(threadRunqueue, controlBlock);
 	threadListAdd(allThreads, controlBlock);
+	allThreadsCount++;
 
 	// YOUR CODE HERE
 	newContext -> uc_link = &mainContext;
@@ -382,6 +385,7 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 	//free(controlBlock -> threadContext -> uc_link);
 	free(controlBlock -> threadContext);
 	free(controlBlock);
+	allThreadsCount--;
 
 	// YOUR CODE HERE
 	return 0;
@@ -548,6 +552,26 @@ static void schedule() {
 	// Freeze the timer.
 	timer.it_value.tv_sec = 0;
 	timer.it_value.tv_usec = 0;
+
+	// If there are no remaining threads except main in allThreads, tear down.
+	if (allThreadsCount == 1 && allThreads -> front -> threadControlBlock -> threadID == 0)
+	{
+		threadListDestroy(allThreads);
+		threadListDestroy(threadRunqueue);
+		free(allThreads);
+		free(threadRunqueue);
+
+		free(schedulerContext.uc_stack.ss_sp);
+		free(&(schedulerContext.uc_stack));
+		//free(controlBlock -> threadContext -> uc_link);
+		//free(runningThread -> threadContext);
+		ucontext_t goToContext = *(runningThread -> threadContext);
+		free(runningThread);
+		allThreadsCount = 0;
+		threadsCreated = 0;
+
+		setcontext(&goToContext);
+	}
 
 	// Invoke different actual scheduling algorithms
 	// according to policy (STCF or MLFQ)
