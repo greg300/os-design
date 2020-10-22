@@ -187,7 +187,7 @@ void threadListDestroy(threadList * threads)
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
                       void *(*function)(void*), void * arg)
 {	
-	printf("Creating thread #%d...\n", threadsCreated);
+	printf("Creating thread #%d with ID %p...\n", threadsCreated, thread);
 	// create Thread Control Block
 	tcb * controlBlock = (tcb *) malloc(sizeof(tcb));
 	controlBlock -> threadID = thread;
@@ -244,6 +244,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		//getcontext(&mainContext);
 		makecontext(&schedulerContext, schedule, 0);
 
+		threadListAdd(allThreads, mainControlBlock);
 		runningThread = mainControlBlock;
 	}
 	else
@@ -260,7 +261,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	//getcontext(&mainContext);
 	makecontext(newContext, (void (*)()) function, 1, arg);
 
-	printf("Thread %u created successfully.\n", *(thread));
+	printf("Thread %p created successfully.\n", thread);
 	threadsCreated++;
 
 	getcontext(&mainContext);
@@ -304,9 +305,9 @@ void mypthread_exit(void *value_ptr)
 		{
 			current -> threadControlBlock -> threadStatus = READY;
 			if (current -> threadControlBlock -> threadID != NULL)
-				printf("On exit, thread %u unblocked thread %u which was waiting to join.\n", *(runningThread -> threadID), *(current -> threadControlBlock -> threadID));
+				printf("On exit, thread %p unblocked thread %p which was waiting to join.\n", runningThread -> threadID, current -> threadControlBlock -> threadID);
 			else
-				printf("On exit, thread %u unblocked main thread which was waiting to join.\n", *(runningThread -> threadID));
+				printf("On exit, thread %p unblocked main thread which was waiting to join.\n", runningThread -> threadID);
 			break;
 		}
 		current = current -> next;
@@ -315,7 +316,7 @@ void mypthread_exit(void *value_ptr)
 	// Deallocated any dynamic memory created when starting this thread
 	//printf("EXITING!\n");
 	if (runningThread -> threadID != NULL)
-		printf("Thread %u exiting.\n", *(runningThread -> threadID));
+		printf("Thread %p exiting.\n", runningThread -> threadID);
 	else
 		printf("Main thread exiting.\n");
 	runningThread -> threadStatus = EXITED;
@@ -328,9 +329,9 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 {
 	// wait for a specific thread to terminate
 	if (runningThread -> threadID != NULL)
-		printf("Thread %u attempting to join on thread %u.\n", *(runningThread -> threadID), thread);
+		printf("Thread %p attempting to join on thread %p.\n", runningThread -> threadID, &thread);
 	else
-		printf("Main thread attempting to join on thread %u.\n", thread);
+		printf("Main thread attempting to join on thread %p.\n", &thread);
 
 	// if (*(runningThread -> threadID) == thread && runningThread -> threadStatus == EXITED)
 
@@ -352,16 +353,16 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 
 		runningThread -> timeQuantumsPassed++;
 		if (runningThread -> threadID != NULL)
-			printf("Thread %u blocked attempting to join on thread %u.\n", *(runningThread -> threadID), thread);
+			printf("Thread %p blocked attempting to join on thread %p.\n", runningThread -> threadID, &thread);
 		else
-			printf("Main thread blocked attempting to join on thread %u.\n", thread);
+			printf("Main thread blocked attempting to join on thread %p.\n", &thread);
 		swapcontext(runningThread -> threadContext, &schedulerContext);
 	}
 
 	if (runningThread -> threadID != NULL)
-		printf("Thread %u done waiting to join on thread %u.\n", *(runningThread -> threadID), thread);
+		printf("Thread %p done waiting to join on thread %p.\n", runningThread -> threadID, &thread);
 	else
-		printf("Main thread done waiting to join on thread %u.\n", thread);
+		printf("Main thread done waiting to join on thread %p.\n", &thread);
 
 	if (value_ptr != NULL)
 	{
@@ -609,7 +610,7 @@ static void sched_stcf() {
 	runningThread -> threadStatus = SCHEDULED;
 	threadListRemove(threadRunqueue, runningThread);
 	if (runningThread -> threadID != NULL)
-		printf("Scheduler picked thread %u.\n", *(runningThread -> threadID));
+		printf("Scheduler picked thread %p.\n", runningThread -> threadID);
 	else
 		printf("Scheduler picked main thread.\n");
 
