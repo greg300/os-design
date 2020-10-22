@@ -570,8 +570,8 @@ static void schedule() {
 		//free(runningThread -> threadContext);
 		ucontext_t goToContext = *(runningThread -> threadContext);
 		
-		if (runningThread != NULL)
-			free(runningThread);
+		//if (runningThread != NULL)
+			//free(runningThread);
 		allThreadsCount = 0;
 		threadsCreated = 0;
 
@@ -625,6 +625,10 @@ static void sched_stcf() {
 	current = allThreads -> front;
 	while (current != NULL)
 	{
+		if (current -> threadControlBlock -> threadID > threadsCreated)
+		{
+			printf("DETECTED thread %u.\n", current -> threadControlBlock -> threadID);
+		}
 		if (current -> threadControlBlock -> threadStatus == READY)
 		{
 			current -> threadControlBlock -> threadStatus = SCHEDULED;
@@ -633,10 +637,10 @@ static void sched_stcf() {
 		current = current -> next;
 	}
 
-	// If a thread was previously running and was not blocking, add it back to the runqueue.
+	// If a thread was previously running and was not blocking or exiting, add it back to the runqueue.
 	if (runningThread != NULL)
 	{
-		if (runningThread -> threadStatus != BLOCKED)
+		if (runningThread -> threadStatus != BLOCKED && runningThread -> threadStatus != EXITED)
 		{
 			runningThread -> threadStatus = SCHEDULED;
 			threadListAdd(threadRunqueue, runningThread);
