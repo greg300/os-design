@@ -187,10 +187,13 @@ void threadListDestroy(threadList * threads)
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
                       void *(*function)(void*), void * arg)
 {	
-	printf("Creating thread #%d with ID %u...\n", threadsCreated, *thread + threadsCreated);
+	printf("Creating thread #%d with ID %u...\n", threadsCreated, threadsCreated + 1);
+	// Set the thread ID.
+	*(thread) = threadsCreated + 1;
+	
 	// create Thread Control Block
 	tcb * controlBlock = (tcb *) malloc(sizeof(tcb));
-	controlBlock -> threadID = *thread + threadsCreated;
+	controlBlock -> threadID = threadsCreated + 1;
 	controlBlock -> timeQuantumsPassed = 0;
 	controlBlock -> threadStatus = READY;
 
