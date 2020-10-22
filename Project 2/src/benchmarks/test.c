@@ -10,6 +10,8 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <string.h>
+#include <pthread.h>
+#include <unistd.h>
 #include "../mypthread.h"
 
 /* A scratch program template on which to call and
