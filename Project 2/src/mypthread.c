@@ -18,8 +18,8 @@
 // INITAILIZE ALL YOUR VARIABLES HERE
 // YOUR CODE HERE
 int threadsCreated = 0;
-ucontext_t schedulerContext, * scp;
-ucontext_t mainContext, * mcp;
+ucontext_t schedulerContext;
+ucontext_t mainContext;
 threadList * threadRunqueue;
 threadList * allThreads;
 tcb * runningThread;
@@ -200,6 +200,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	controlBlock -> threadContext = newContext;
 
 	// allocate space of stack for this thread to run
+	getcontext(newContext);
 	stack_t * newContextStack = (stack_t *) malloc(sizeof(stack_t));
 	newContextStack -> ss_sp = malloc(STACK_SIZE);
 	newContextStack -> ss_size = STACK_SIZE;
@@ -215,30 +216,31 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		timerSetup();
 
 		// Create a main context.
-		mcp = (ucontext_t *) malloc(sizeof(ucontext_t));
-		mainContext = *mcp;
+		//mcp = (ucontext_t *) malloc(sizeof(ucontext_t));
+		//mainContext = *mcp;
 
 		// Create an extra thread for the main program.
 		tcb * mainControlBlock = (tcb *) malloc(sizeof(tcb));
 		mainControlBlock -> threadID = NULL;
 		mainControlBlock -> timeQuantumsPassed = 0;
 		mainControlBlock -> threadStatus = READY;
-		mainControlBlock -> threadContext = mcp;
+		mainControlBlock -> threadContext = &mainContext;
 		mainControlBlock -> threadStack = &(mainControlBlock -> threadContext -> uc_stack);
 
 		// Create a context for the scheduler.
-		scp = (ucontext_t *) malloc(sizeof(ucontext_t));
-		schedulerContext = *scp;
+		//scp = (ucontext_t *) malloc(sizeof(ucontext_t));
+		//schedulerContext = *scp;
 
+		getcontext(&schedulerContext);
 		stack_t * schedulerContextStack = (stack_t *) malloc(sizeof(stack_t));
 		schedulerContextStack -> ss_sp = malloc(STACK_SIZE);
 		schedulerContextStack -> ss_size = STACK_SIZE;
 		schedulerContext.uc_stack = *schedulerContextStack;
-		schedulerContext.uc_link = NULL;
+		schedulerContext.uc_link = &mainContext;
 		//schedulerContext.uc_link = mcp;
 
 		//getcontext(&mainContext);
-		makecontext(scp, schedule, 0);
+		makecontext(&schedulerContext, schedule, 0);
 
 		runningThread = mainControlBlock;
 	}
@@ -254,11 +256,11 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	threadListAdd(allThreads, controlBlock);
 
 	// YOUR CODE HERE
-	newContext -> uc_link = mcp;
+	newContext -> uc_link = &mainContext;
 	//getcontext(&mainContext);
 	makecontext(newContext, (void (*)()) function, 1, arg);
 
-	getcontext(mcp);
+	getcontext(&mainContext);
 
     return 0;
 };
@@ -275,7 +277,7 @@ int mypthread_yield()
 
 	// wwitch from thread context to scheduler context
 	//swapcontext(runningThread -> threadContext, &mainContext);
-	swapcontext(runningThread -> threadContext, scp);
+	swapcontext(runningThread -> threadContext, &schedulerContext);
 
 	// YOUR CODE HERE
 	return 0;
@@ -334,7 +336,7 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 		controlBlock -> threadWaitingToJoin = runningThread -> threadID;
 
 		runningThread -> timeQuantumsPassed++;
-		swapcontext(runningThread -> threadContext, scp);
+		swapcontext(runningThread -> threadContext, &schedulerContext);
 	}
 
 	if (value_ptr != NULL)
@@ -347,7 +349,7 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 	free(controlBlock -> threadStack -> ss_sp);
 	free(controlBlock -> threadStack);
 	//free(controlBlock -> threadContext -> uc_link);
-	free(controlBlock -> threadContext);
+	//free(controlBlock -> threadContext);
 	free(controlBlock);
 
 	// YOUR CODE HERE
@@ -388,7 +390,7 @@ int mypthread_mutex_lock(mypthread_mutex_t *mutex) {
 			threadListAdd(mutex -> waitingThreads, runningThread); 
 
 			runningThread -> timeQuantumsPassed++;
-			swapcontext(runningThread -> threadContext, scp);
+			swapcontext(runningThread -> threadContext, &schedulerContext);
 		}
 		
         // YOUR CODE HERE
@@ -460,7 +462,7 @@ void timeSigHandler(int sigNum)
 		runningThread -> timeQuantumsPassed++;
 
 		printf("Quantum passed, swapping into scheduler...\n");
-		swapcontext(runningThread -> threadContext, scp);
+		swapcontext(runningThread -> threadContext, &schedulerContext);
 	}
 }
 
