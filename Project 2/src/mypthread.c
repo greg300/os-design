@@ -412,10 +412,10 @@ int mypthread_mutex_lock(mypthread_mutex_t *mutex) {
 			// mutex -> isLocked = 1
 			mutex -> lockingThread = runningThread;
 
-			if (runningThread -> threadID != 0)
-				printf("Thread %u acquired mutex %p.\n", runningThread -> threadID, mutex);
-			else
-				printf("Main thread acquired mutex %p.\n", mutex);
+			// if (runningThread -> threadID != 0)
+			// 	printf("Thread %u acquired mutex %p.\n", runningThread -> threadID, mutex);
+			// else
+			// 	printf("Main thread acquired mutex %p.\n", mutex);
 
 			return 0;
 		}
@@ -450,15 +450,17 @@ int mypthread_mutex_unlock(mypthread_mutex_t *mutex) {
 	mutex -> isLocked = 0;
 	mutex -> lockingThread = NULL;
 
-	if (runningThread -> threadID != 0)
-		printf("Thread %u unlocked mutex %p.\n", runningThread -> threadID, mutex);
-	else
-		printf("Main thread unlocked mutex %p.\n", mutex);
+	// if (runningThread -> threadID != 0)
+	// 	printf("Thread %u unlocked mutex %p.\n", runningThread -> threadID, mutex);
+	// else
+	// 	printf("Main thread unlocked mutex %p.\n", mutex);
 
 	// Add all blocked threads to the runqueue.
 	node * current = mutex -> waitingThreads -> front;
 	while (current != NULL)
 	{
+		printf("Thread %u unblocked thread %u.\n", runningThread -> threadID, current -> threadControlBlock -> threadID);
+
 		current -> threadControlBlock -> threadStatus = READY;
 		threadListAdd(threadRunqueue, current -> threadControlBlock);
 		current = current -> next;
