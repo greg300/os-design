@@ -216,7 +216,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 
 		// Create a main context.
 		mcp = (ucontext_t *) malloc(sizeof(ucontext_t));
-		//mainContext = *mcp;
+		mainContext = *mcp;
 
 		// Create an extra thread for the main program.
 		tcb * mainControlBlock = (tcb *) malloc(sizeof(tcb));
@@ -230,7 +230,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 
 		// Create a context for the scheduler.
 		scp = (ucontext_t *) malloc(sizeof(ucontext_t));
-		//schedulerContext = *scp;
+		schedulerContext = *scp;
 
 		stack_t * schedulerContextStack = (stack_t *) malloc(sizeof(stack_t));
 		schedulerContextStack -> ss_sp = malloc(STACK_SIZE);
