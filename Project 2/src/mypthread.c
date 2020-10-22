@@ -226,8 +226,6 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		mainControlBlock -> threadContext = mcp;
 		mainControlBlock -> threadStack = &(mainControlBlock -> threadContext -> uc_stack);
 
-		runningThread = mainControlBlock;
-
 		// Create a context for the scheduler.
 		scp = (ucontext_t *) malloc(sizeof(ucontext_t));
 		schedulerContext = *scp;
@@ -240,6 +238,8 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 
 		//getcontext(&mainContext);
 		makecontext(scp, schedule, 0);
+
+		runningThread = mainControlBlock;
 	}
 	else
 	{
