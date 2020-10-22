@@ -38,12 +38,12 @@ typedef uint mypthread_t;
 
 typedef struct threadControlBlock {
 	/* add important states in a thread control block */
-	mypthread_t * threadID;  // thread Id
+	mypthread_t threadID;  // thread Id
 	int threadStatus;  // thread status
 	ucontext_t * threadContext;  // thread context
 	stack_t * threadStack;  // thread stack
 	int timeQuantumsPassed;  // Number of time quantums passed since thread start.
-	mypthread_t * threadWaitingToJoin;
+	mypthread_t threadWaitingToJoin;
 	// thread priority
 	void * returnValuePtr;  // return value
 	// And more ...
@@ -106,7 +106,7 @@ void runqueueDequeue(runqueue * queue);
 int threadListRemove(threadList * threads, tcb * threadControlBlock);
 
 /* Search for a thread by threadID; return TCB if found, NULL if not. */
-tcb * threadListSearch(threadList * threads, mypthread_t * thread);
+tcb * threadListSearch(threadList * threads, mypthread_t thread);
 
 /* Free each node in the list. */
 void threadListDestroy(threadList * threads);

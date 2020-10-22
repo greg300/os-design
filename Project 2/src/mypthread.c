@@ -145,7 +145,7 @@ int threadListRemove(threadList * threads, tcb * threadControlBlock)
 }
 
 /* Search for a thread by threadID; return TCB if found, NULL if not. */
-tcb * threadListSearch(threadList * threads, mypthread_t * thread)
+tcb * threadListSearch(threadList * threads, mypthread_t thread)
 {
 	node * current = threads -> front;
 
@@ -187,10 +187,10 @@ void threadListDestroy(threadList * threads)
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
                       void *(*function)(void*), void * arg)
 {	
-	printf("Creating thread #%d with ID %p...\n", threadsCreated, thread);
+	printf("Creating thread #%d with ID %u...\n", threadsCreated, *thread);
 	// create Thread Control Block
 	tcb * controlBlock = (tcb *) malloc(sizeof(tcb));
-	controlBlock -> threadID = thread;
+	controlBlock -> threadID = *thread;
 	controlBlock -> timeQuantumsPassed = 0;
 	controlBlock -> threadStatus = READY;
 
@@ -223,7 +223,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 
 		// Create an extra thread for the main program.
 		tcb * mainControlBlock = (tcb *) malloc(sizeof(tcb));
-		mainControlBlock -> threadID = NULL;
+		mainControlBlock -> threadID = 0;
 		mainControlBlock -> timeQuantumsPassed = 0;
 		mainControlBlock -> threadStatus = READY;
 		mainControlBlock -> threadContext = &mainContext;
@@ -261,7 +261,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	//getcontext(&mainContext);
 	makecontext(newContext, (void (*)()) function, 1, arg);
 
-	printf("Thread %p created successfully.\n", thread);
+	printf("Thread %u created successfully.\n", *(thread));
 	threadsCreated++;
 
 	getcontext(&mainContext);
@@ -304,10 +304,10 @@ void mypthread_exit(void *value_ptr)
 		if (runningThread -> threadWaitingToJoin == current -> threadControlBlock -> threadID)
 		{
 			current -> threadControlBlock -> threadStatus = READY;
-			if (current -> threadControlBlock -> threadID != NULL)
-				printf("On exit, thread %p unblocked thread %p which was waiting to join.\n", runningThread -> threadID, current -> threadControlBlock -> threadID);
+			if (current -> threadControlBlock -> threadID != 0)
+				printf("On exit, thread %u unblocked thread %u which was waiting to join.\n", runningThread -> threadID, current -> threadControlBlock -> threadID);
 			else
-				printf("On exit, thread %p unblocked main thread which was waiting to join.\n", runningThread -> threadID);
+				printf("On exit, thread %u unblocked main thread which was waiting to join.\n", runningThread -> threadID);
 			break;
 		}
 		current = current -> next;
@@ -315,8 +315,8 @@ void mypthread_exit(void *value_ptr)
 
 	// Deallocated any dynamic memory created when starting this thread
 	//printf("EXITING!\n");
-	if (runningThread -> threadID != NULL)
-		printf("Thread %p exiting.\n", runningThread -> threadID);
+	if (runningThread -> threadID != 0)
+		printf("Thread %u exiting.\n", runningThread -> threadID);
 	else
 		printf("Main thread exiting.\n");
 	runningThread -> threadStatus = EXITED;
@@ -328,15 +328,15 @@ void mypthread_exit(void *value_ptr)
 int mypthread_join(mypthread_t thread, void **value_ptr)
 {
 	// wait for a specific thread to terminate
-	if (runningThread -> threadID != NULL)
-		printf("Thread %p attempting to join on thread %p.\n", runningThread -> threadID, &thread);
+	if (runningThread -> threadID != 0)
+		printf("Thread %u attempting to join on thread %u.\n", runningThread -> threadID, thread);
 	else
-		printf("Main thread attempting to join on thread %p.\n", &thread);
+		printf("Main thread attempting to join on thread %u.\n", thread);
 
 	// if (*(runningThread -> threadID) == thread && runningThread -> threadStatus == EXITED)
 
 	// Look for the thread in the threadList.
-	tcb * controlBlock = threadListSearch(allThreads, &thread);
+	tcb * controlBlock = threadListSearch(allThreads, thread);
 
 	// If the given thread is not in the threadList, it must have already terminated.
 	if (controlBlock == NULL)
@@ -352,17 +352,17 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 		controlBlock -> threadWaitingToJoin = runningThread -> threadID;
 
 		runningThread -> timeQuantumsPassed++;
-		if (runningThread -> threadID != NULL)
-			printf("Thread %p blocked attempting to join on thread %p.\n", runningThread -> threadID, &thread);
+		if (runningThread -> threadID != 0)
+			printf("Thread %u blocked attempting to join on thread %u.\n", runningThread -> threadID, thread);
 		else
-			printf("Main thread blocked attempting to join on thread %p.\n", &thread);
+			printf("Main thread blocked attempting to join on thread %u.\n", thread);
 		swapcontext(runningThread -> threadContext, &schedulerContext);
 	}
 
-	if (runningThread -> threadID != NULL)
-		printf("Thread %p done waiting to join on thread %p.\n", runningThread -> threadID, &thread);
+	if (runningThread -> threadID != 0)
+		printf("Thread %u done waiting to join on thread %u.\n", runningThread -> threadID, thread);
 	else
-		printf("Main thread done waiting to join on thread %p.\n", &thread);
+		printf("Main thread done waiting to join on thread %u.\n", thread);
 
 	if (value_ptr != NULL)
 	{
@@ -609,8 +609,8 @@ static void sched_stcf() {
 	runningThread = minTimeQuantumTCB;
 	runningThread -> threadStatus = SCHEDULED;
 	threadListRemove(threadRunqueue, runningThread);
-	if (runningThread -> threadID != NULL)
-		printf("Scheduler picked thread %p.\n", runningThread -> threadID);
+	if (runningThread -> threadID != 0)
+		printf("Scheduler picked thread %u.\n", runningThread -> threadID);
 	else
 		printf("Scheduler picked main thread.\n");
 
