@@ -200,7 +200,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 	controlBlock -> threadContext = newContext;
 
 	// allocate space of stack for this thread to run
-	getcontext(newContext);
+	getcontext(&(*newContext));
 	stack_t * newContextStack = (stack_t *) malloc(sizeof(stack_t));
 	newContextStack -> ss_sp = malloc(STACK_SIZE);
 	newContextStack -> ss_size = STACK_SIZE;
@@ -228,8 +228,8 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		mainControlBlock -> threadStack = &(mainControlBlock -> threadContext -> uc_stack);
 
 		// Create a context for the scheduler.
-		//scp = (ucontext_t *) malloc(sizeof(ucontext_t));
-		//schedulerContext = *scp;
+		ucontext_t * scp = (ucontext_t *) malloc(sizeof(ucontext_t));
+		schedulerContext = *scp;
 
 		getcontext(&schedulerContext);
 		stack_t * schedulerContextStack = (stack_t *) malloc(sizeof(stack_t));
@@ -349,7 +349,7 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 	free(controlBlock -> threadStack -> ss_sp);
 	free(controlBlock -> threadStack);
 	//free(controlBlock -> threadContext -> uc_link);
-	//free(controlBlock -> threadContext);
+	free(controlBlock -> threadContext);
 	free(controlBlock);
 
 	// YOUR CODE HERE
