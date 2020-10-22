@@ -187,10 +187,10 @@ void threadListDestroy(threadList * threads)
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
                       void *(*function)(void*), void * arg)
 {	
-	printf("Creating thread #%d with ID %u...\n", threadsCreated, threadsCreated + 1);
+	printf("Creating thread #%d with ID %u...\n", threadsCreated + 1, threadsCreated + 1);
 	// Set the thread ID.
 	*(thread) = threadsCreated + 1;
-	
+
 	// create Thread Control Block
 	tcb * controlBlock = (tcb *) malloc(sizeof(tcb));
 	controlBlock -> threadID = threadsCreated + 1;
@@ -411,6 +411,12 @@ int mypthread_mutex_lock(mypthread_mutex_t *mutex) {
 		{
 			// mutex -> isLocked = 1
 			mutex -> lockingThread = runningThread;
+
+			if (runningThread -> threadID != 0)
+				printf("Thread %u acquired mutex %p.\n", runningThread -> threadID, mutex);
+			else
+				printf("Main thread acquired mutex %p.\n", mutex);
+
 			return 0;
 		}
 		// Otherwise, block this thread and move to the scheduler.
@@ -420,12 +426,19 @@ int mypthread_mutex_lock(mypthread_mutex_t *mutex) {
 			threadListRemove(threadRunqueue, runningThread);
 			threadListAdd(mutex -> waitingThreads, runningThread); 
 
+			if (runningThread -> threadID != 0)
+				printf("Thread %u blocked while acquiring mutex %p.\n", runningThread -> threadID, mutex);
+			else
+				printf("Main thread blocked while acquiring mutex %p.\n", mutex);
+
 			runningThread -> timeQuantumsPassed++;
 			swapcontext(runningThread -> threadContext, &schedulerContext);
+
+			// Make sure thread tries to acquire the lock again.
+			return mypthread_mutex_lock(mutex);
 		}
 		
         // YOUR CODE HERE
-        return 0;
 };
 
 /* release the mutex lock */
@@ -436,6 +449,11 @@ int mypthread_mutex_unlock(mypthread_mutex_t *mutex) {
 
 	mutex -> isLocked = 0;
 	mutex -> lockingThread = NULL;
+
+	if (runningThread -> threadID != 0)
+		printf("Thread %u unlocked mutex %p.\n", runningThread -> threadID, mutex);
+	else
+		printf("Main thread unlocked mutex %p.\n", mutex);
 
 	// Add all blocked threads to the runqueue.
 	node * current = mutex -> waitingThreads -> front;
