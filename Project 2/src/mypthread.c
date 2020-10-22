@@ -621,6 +621,7 @@ static void sched_stcf() {
 	{
 		if (current -> threadControlBlock -> threadStatus == READY)
 		{
+			current -> threadControlBlock -> threadStatus = SCHEDULED;
 			threadListAdd(threadRunqueue, current -> threadControlBlock);
 		}
 		current = current -> next;
@@ -631,7 +632,7 @@ static void sched_stcf() {
 	{
 		if (runningThread -> threadStatus != BLOCKED)
 		{
-			runningThread -> threadStatus = READY;
+			runningThread -> threadStatus = SCHEDULED;
 			threadListAdd(threadRunqueue, runningThread);
 		}
 	}
@@ -651,7 +652,7 @@ static void sched_stcf() {
 	{
 		if (current -> threadControlBlock -> timeQuantumsPassed < minTimeQuantums)
 		{
-			if (current -> threadControlBlock -> threadStatus == READY)
+			if (current -> threadControlBlock -> threadStatus == SCHEDULED)
 			{
 				minTimeQuantums = current -> threadControlBlock -> timeQuantumsPassed;
 				minTimeQuantumTCB = current -> threadControlBlock;
@@ -661,7 +662,7 @@ static void sched_stcf() {
 	}
 
 	runningThread = minTimeQuantumTCB;
-	runningThread -> threadStatus = SCHEDULED;
+	//runningThread -> threadStatus = SCHEDULED;
 	threadListRemove(threadRunqueue, runningThread);
 	if (runningThread -> threadID != 0)
 		printf("Scheduler picked thread %u.\n", runningThread -> threadID);
