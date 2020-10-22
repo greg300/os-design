@@ -462,7 +462,7 @@ int mypthread_mutex_unlock(mypthread_mutex_t *mutex) {
 		printf("Thread %u unblocked thread %u.\n", runningThread -> threadID, current -> threadControlBlock -> threadID);
 
 		current -> threadControlBlock -> threadStatus = READY;
-		threadListAdd(threadRunqueue, current -> threadControlBlock);
+		//threadListAdd(threadRunqueue, current -> threadControlBlock);
 		current = current -> next;
 	}
 
