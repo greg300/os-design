@@ -234,14 +234,14 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 		mainControlBlock -> threadStack = &(mainControlBlock -> threadContext -> uc_stack);
 
 		// Create a context for the scheduler.
-		ucontext_t * scp = (ucontext_t *) malloc(sizeof(ucontext_t));
-		schedulerContext = *scp;
+		//ucontext_t * scp = (ucontext_t *) malloc(sizeof(ucontext_t));
+		//schedulerContext = *scp;
 
 		getcontext(&schedulerContext);
-		stack_t * schedulerContextStack = (stack_t *) malloc(sizeof(stack_t));
-		schedulerContextStack -> ss_sp = malloc(STACK_SIZE);
-		schedulerContextStack -> ss_size = STACK_SIZE;
-		schedulerContext.uc_stack = *schedulerContextStack;
+		//stack_t * schedulerContextStack = (stack_t *) malloc(sizeof(stack_t));
+		schedulerContext.uc_stack.ss_sp = malloc(STACK_SIZE);
+		schedulerContext.uc_stack.ss_size = STACK_SIZE;
+		//schedulerContext.uc_stack = *schedulerContextStack;
 		schedulerContext.uc_link = &mainContext;
 		//schedulerContext.uc_link = mcp;
 
@@ -562,7 +562,7 @@ static void schedule() {
 		free(threadRunqueue);
 
 		free(schedulerContext.uc_stack.ss_sp);
-		free(&(schedulerContext.uc_stack));
+		//free(&(schedulerContext.uc_stack));
 		//free(controlBlock -> threadContext -> uc_link);
 		//free(runningThread -> threadContext);
 		ucontext_t goToContext = *(runningThread -> threadContext);
