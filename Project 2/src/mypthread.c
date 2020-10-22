@@ -314,6 +314,8 @@ void mypthread_exit(void *value_ptr)
 				printf("On exit, thread %u unblocked thread %u which was waiting to join.\n", runningThread -> threadID, current -> threadControlBlock -> threadID);
 			else
 				printf("On exit, thread %u unblocked main thread which was waiting to join.\n", runningThread -> threadID);
+
+			//runningThread -> threadWaitingToJoin = NULL;
 			break;
 		}
 		current = current -> next;
@@ -321,17 +323,17 @@ void mypthread_exit(void *value_ptr)
 
 	// Deallocated any dynamic memory created when starting this thread
 	//printf("EXITING!\n");
+	runningThread -> threadStatus = EXITED;
+
 	if (runningThread -> threadID != 0)
 		printf("Thread %u exiting.\n", runningThread -> threadID);
 	else
 		printf("Main thread exiting.\n");
-	runningThread -> threadStatus = EXITED;
 
 	runningThread -> timeQuantumsPassed++;
 	swapcontext(runningThread -> threadContext, &schedulerContext);
 	// YOUR CODE HERE
 };
-
 
 /* Wait for thread termination */
 int mypthread_join(mypthread_t thread, void **value_ptr)
@@ -357,7 +359,7 @@ int mypthread_join(mypthread_t thread, void **value_ptr)
 	if (controlBlock -> threadStatus != EXITED)
 	{
 		runningThread -> threadStatus = BLOCKED;
-		threadListRemove(threadRunqueue, runningThread);
+		//threadListRemove(threadRunqueue, runningThread);
 		controlBlock -> threadWaitingToJoin = runningThread -> threadID;
 
 		runningThread -> timeQuantumsPassed++;
@@ -567,7 +569,7 @@ static void schedule() {
 		//free(controlBlock -> threadContext -> uc_link);
 		//free(runningThread -> threadContext);
 		ucontext_t goToContext = *(runningThread -> threadContext);
-		free(runningThread);
+		//free(runningThread);
 		allThreadsCount = 0;
 		threadsCreated = 0;
 
