@@ -2,14 +2,10 @@
 #define _XOPEN_SOURCE
 
 #include <unistd.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <ucontext.h>
 #include <signal.h>
-#include <sys/time.h>
-#include <string.h>
 #include <unistd.h>
 #include <pthread.h>
 #include "../mypthread.h"
