@@ -17,11 +17,11 @@ int main(int argc, char **argv) {
 	schedulerContext.uc_stack.ss_sp = malloc(8192);
 	schedulerContext.uc_stack.ss_size = 8192;
 	schedulerContext.uc_stack.ss_flags = 0;
-	schedulerContext.uc_link = NULL;
+	schedulerContext.uc_link = &mainContext;
 	//schedulerContext.uc_link = mcp;
 
 	// printf("Before getcontext\n");
-	// getcontext(&mainContext);
+	getcontext(&mainContext);
 	printf("Before makecontext\n");
 	makecontext(&schedulerContext, func1, 0);
 
@@ -34,3 +34,4 @@ int main(int argc, char **argv) {
 	swapcontext(&mainContext, &schedulerContext);
 
 	printf("Success.\n");
+}
