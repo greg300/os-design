@@ -569,7 +569,9 @@ static void schedule() {
 		//free(controlBlock -> threadContext -> uc_link);
 		//free(runningThread -> threadContext);
 		ucontext_t goToContext = *(runningThread -> threadContext);
-		//free(runningThread);
+		
+		if (runningThread != NULL)
+			free(runningThread);
 		allThreadsCount = 0;
 		threadsCreated = 0;
 
