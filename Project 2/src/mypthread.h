@@ -1,8 +1,8 @@
 // File:	mypthread_t.h
 
 // List all group member's name: Gregory Giovannini
-// username of iLab:
-// iLab Server:
+// username of iLab: gdg44
+// iLab Server: vi.cs.rutgers.edu
 
 #ifndef MYTHREAD_T_H
 #define MYTHREAD_T_H
@@ -10,7 +10,7 @@
 #define _GNU_SOURCE
 #define _XOPEN_SOURCE
 
-/* To use Linux pthread Library in Benchmark, you have to comment the USE_MYTHREAD macro */
+/* To use Linux pthread Library in Benchmark, you have to comment the USE_MYTHREAD macro. */
 #define USE_MYTHREAD 1
 
 #define READY 0
@@ -19,11 +19,10 @@
 #define EXITED 3
 
 //#define STACK_SIZE 8192
-//#define STACK_SIZE SIGSTKSZ
-#define STACK_SIZE 16384
-#define QUANTUM 5  // in ms
+#define STACK_SIZE 16384  // The size in bytes of a context's stack.
+#define QUANTUM 5  // The time in ms after which a timer interrupt will trigger the scheduler.
 
-/* include lib header files that you need here: */
+/* Lib header files: */
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -34,121 +33,117 @@
 #include <sys/time.h>
 #include <string.h>
 
+/* A unique ID for a thread. */
 typedef uint mypthread_t;
 
-typedef struct threadControlBlock {
+/* A data structure to hold all the details associated with a thread. */
+typedef struct threadControlBlock
+{
 	/* add important states in a thread control block */
-	mypthread_t threadID;  // thread Id
-	int threadStatus;  // thread status
-	ucontext_t * threadContext;  // thread context
-	stack_t * threadStack;  // thread stack
-	int timeQuantumsPassed;  // Number of time quantums passed since thread start.
-	mypthread_t threadWaitingToJoin;
-	// thread priority
-	void * returnValuePtr;  // return value
-	// And more ...
-
-	// YOUR CODE HERE
+	mypthread_t threadID;  				// Thread ID.
+	int threadStatus;  					// Thread status.
+	ucontext_t * threadContext;  		// Thread context.
+	stack_t * threadStack;  			// Thread stack.
+	int timeQuantumsPassed;  			// Number of time quantums passed since thread start.
+	mypthread_t threadWaitingToJoin;  	// Thread ID of the thread waiting to join on this thread.
+	void * returnValuePtr;  			// Return value of this thread, if applicable.
 } tcb;
 
-// Linked List node, representing a TCB of a thread in the runqueue or in the list of created threads.
-typedef struct node {
-	tcb * threadControlBlock;
-	struct node * next;
+/* Linked List node, representing a TCB of a thread in the runqueue or in the list of created threads. */
+typedef struct node
+{
+	tcb * threadControlBlock;	// The TCB of the thread represented by this node.
+	struct node * next;			// Reference to the next node in the Linked List.
 } node;
 
-// The runqueue for created threads.
-typedef struct runqueue {
-	node * front;
-	node * rear;
+/* [UNUSED] The Queue for scheduling created threads. */
+typedef struct runqueue
+{
+	node * front;	// Reference to the first node in the Queue.
+	node * rear;    // Reference to the last node in the Queue.
 } runqueue;
 
 // A Linked List of created threads.
-typedef struct threadList {
-	node * front;
+typedef struct threadList
+{
+	node * front;  // Reference to the first node in the Linked List.
 } threadList;
 
-/* mutex struct definition */
-typedef struct mypthread_mutex_t {
-	/* add something here */
-	int isLocked;
-	tcb * lockingThread;
-	threadList * waitingThreads;
-	// YOUR CODE HERE
+/* Mutex struct. */
+typedef struct mypthread_mutex_t
+{
+	int isLocked;					// Maintains whether or not the thread is locked(1) or unlocked(0);
+	tcb * lockingThread;			// Represents the thread that currently has control of the mutex.
+	threadList * waitingThreads;	// Represents the list of all threads waiting on this mutex to be unlocked.
 } mypthread_mutex_t;
 
-/* define your data structures here: */
-// Feel free to add your own auxiliary data structures (linked list or queue etc...)
-
-// YOUR CODE HERE
-
 /* Function Declarations: */
-
-/* Create a new Linked List node. */
+/* [HELPER] Create a new Linked List node. */
 node * newNode(tcb * threadControlBlock);
 
-/* Create a new, empty runqueue. */
+/* [UNUSED][HELPER] Create a new, empty runqueue. */
 runqueue * runqueueCreate();
 
-/* Create a new, empty threadList. */
+/* [HELPER] Create a new, empty threadList. */
 threadList * threadListCreate();
 
-/* Add a thread to the runqueue. */
+/* [UNUSED][HELPER] Add a thread to the runqueue. */
 void runqueueEnqueue(runqueue * queue, tcb * threadControlBlock);
 
-/* Add a thread to the beginning of the threadList. */
+/* [HELPER] Add a thread to the beginning of the threadList. */
 void threadListAdd(threadList * threads, tcb * threadControlBlock);
 
-/* Remove a thread from the runqueue. */
+/* [UNUSED][HELPER] Remove a thread from the runqueue. */
 void runqueueDequeue(runqueue * queue);
 
-/* Remove a thread from the threadList; return 1 if found, 0 if not. */
+/* [HELPER] Remove a thread from the threadList, searching by TCB; return 1 if found, 0 if not. */
 int threadListRemove(threadList * threads, tcb * threadControlBlock);
 
-/* Search for a thread by threadID; return TCB if found, NULL if not. */
+/* [HELPER] Search for a thread by threadID; return TCB if found, NULL if not. */
 tcb * threadListSearch(threadList * threads, mypthread_t thread);
 
-/* Free each node in the list. */
+/* [HELPER] Free each node in the list. */
 void threadListDestroy(threadList * threads);
 
-/* create a new thread */
+/* [PTHREAD] Create a new thread. */
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr, void
     *(*function)(void*), void * arg);
 
-/* give CPU pocession to other user level threads voluntarily */
+/* [UNUSED][PTHREAD] Give CPU possession to other user-level threads voluntarily. */
 int mypthread_yield();
 
-/* terminate a thread */
+/* [PTHREAD] Terminate a thread. */
 void mypthread_exit(void *value_ptr);
 
-/* wait for thread termination */
+/* [PTHREAD] Wait for thread termination. */
 int mypthread_join(mypthread_t thread, void **value_ptr);
 
-/* initial the mutex lock */
+/* [PTHREAD] Initialize the mutex lock. */
 int mypthread_mutex_init(mypthread_mutex_t *mutex, const pthread_mutexattr_t
     *mutexattr);
 
-/* aquire the mutex lock */
+/* [PTHREAD] Aquire the mutex lock. */
 int mypthread_mutex_lock(mypthread_mutex_t *mutex);
 
-/* release the mutex lock */
+/* [PTHREAD] Release the mutex lock. */
 int mypthread_mutex_unlock(mypthread_mutex_t *mutex);
 
-/* destroy the mutex */
+/* [PTHREAD] Destroy the mutex. */
 int mypthread_mutex_destroy(mypthread_mutex_t *mutex);
 
-//void timeSigHandler(int sigNum, siginfo_t * siginfo, void * context);
+/* [SCHEDULER] Invoked on timer interrupt; swaps into the scheduler context. */
 void timeSigHandler(int sigNum);
 
+/* [SCHEDULER] Invoked on first call to pthread_create(); sets up the timer and defines the timer interrupt action. */
 void timerSetup();
 
-/* scheduler */
+/* [SCHEDULER] Main scheduler; picks scheduling policy to run. */
 static void schedule();
 
-/* Preemptive SJF (STCF) scheduling algorithm */
+/* [SCHEDULER] Preemptive SJF (STCF) scheduling algorithm. */
 static void sched_stcf();
 
-/* Preemptive MLFQ scheduling algorithm */
+/* [SCHEDULER] Preemptive MLFQ scheduling algorithm. */
 static void sched_mlfq();
 
 #ifdef USE_MYTHREAD
