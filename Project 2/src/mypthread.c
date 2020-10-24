@@ -373,7 +373,7 @@ int mypthread_join(mypthread_t thread, void ** value_ptr)
 	// If value_ptr is not NULL, pass back the return value of the exiting thread.
 	if (value_ptr != NULL)
 	{
-		*(value_ptr) = runningThread -> returnValuePtr;
+		*(value_ptr) = controlBlock -> returnValuePtr;
 	}
 
 	// Free any dynamic memory created by the joining thread.
