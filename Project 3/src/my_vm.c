@@ -41,6 +41,7 @@ uint32_t createBitMask(int start, int end)
         result |= 1 << (32 - i);
     }
 
+    printBits(result);
     return result;
 }
 
@@ -53,6 +54,7 @@ uint32_t getBits(void *addr, int start, int end)
     result = ((uint32_t) addr) & mask;
     result >>= (32 - end);
 
+    printBits(result);
     return result;
 }
 
