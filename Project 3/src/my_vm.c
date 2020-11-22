@@ -599,6 +599,7 @@ void PutVal(void *va, void *val, int size)
     printf("\tNumber of pages: %d.\n", numPages);
 
     int i;
+    int bytesRemaining = size, bytesToWrite;
 
     // For each virtual page, find the corresponding physical page and write the data.
     for (i = 0; i < numPages; i++)
@@ -616,9 +617,11 @@ void PutVal(void *va, void *val, int size)
 
         // Write the data.
         printf("\tAttemping to write data from source address %x to destination %x.\n", (int) (val + i * PGSIZE), (int) physicalPage);
+        bytesToWrite = bytesRemaining > PGSIZE ? PGSIZE : size % PGSIZE;
         pthread_mutex_lock(&physicalMemoryLock);
-        memcpy(physicalPage, val + i * PGSIZE, PGSIZE);
+        memcpy(physicalPage, val + i * PGSIZE, bytesToWrite);
         pthread_mutex_unlock(&physicalMemoryLock);
+        bytesRemaining -= bytesToWrite;
     }
 }
 
@@ -640,6 +643,7 @@ void GetVal(void *va, void *val, int size)
     printf("\tNumber of pages: %d.\n", numPages);
 
     int i;
+    int bytesRemaining = size, bytesToWrite;
 
     // For each virtual page, find the corresponding physical page and write the data.
     for (i = 0; i < numPages; i++)
@@ -656,9 +660,11 @@ void GetVal(void *va, void *val, int size)
         }
 
         // Write the data.
+        bytesToWrite = bytesRemaining > PGSIZE ? PGSIZE : size % PGSIZE;
         pthread_mutex_lock(&physicalMemoryLock);
         memcpy(val + i * PGSIZE, physicalPage, PGSIZE);
         pthread_mutex_unlock(&physicalMemoryLock);
+        bytesRemaining -= bytesToWrite;
     }
 }
 
