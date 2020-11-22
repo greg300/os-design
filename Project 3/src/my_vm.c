@@ -103,6 +103,7 @@ void SetPhysicalMem()
 
     // HINT: Also calculate the number of physical and virtual pages and allocate
     // virtual and physical bitmaps and initialize them.
+    printf("Setting Physical Memory.\n");
     int i;
 
     // Initialize mutexes.
@@ -120,12 +121,15 @@ void SetPhysicalMem()
     // 1. malloc MEMSIZE memory.
     physicalMemory = malloc(MEMSIZE);
     pthread_mutex_unlock(&physicalMemoryLock);
+    printf("\tAddress of physical memory: %x\n", (int) physicalMemory);
 
     // 2. Calculate number of virtual and physical pages.
     // # of physical pages = MEMSIZE / size of single page (PGSIZE).
     numPhysicalPages = MEMSIZE / PGSIZE;
     // # of virtual pages = MAX_MEMSIZE / size of a single page (PGSIZE).
     numVirtualPages = MAX_MEMSIZE / PGSIZE;
+    printf("\tNumber of physical pages: %d\n", (int) numPhysicalPages);
+    printf("\tNumber of virtual pages: %d\n", (int) numVirtualPages);
 
     // 3. Initialize physical and virtual bitmaps.
     // Phsyical bitmap would be numPhysicalPages size.
@@ -155,16 +159,23 @@ void SetPhysicalMem()
         numPageBitsOuter = (32 - numPageBitsOffset) / 2 + 1;
         numPageBitsInner = (32 - numPageBitsOffset) / 2;
     }
+    printf("\tNumber of outer VPN bits: %d\n", (int) numPageBitsOuter);
+    printf("\tNumber of inner VPN bits: %d\n", (int) numPageBitsInner);
+    printf("\tNumber of offset bits: %d\n", (int) numPageBitsOffset);
     
     // The number of pde_t's per page directory is given by 2^numPageBitsOuter.
     numPageDirectoryEntries = exp2(numPageBitsOuter);
     // The number of pte_t's per page table is given by 2^numPageBitsInner.
     numPageTableEntries = exp2(numPageBitsInner);
+    printf("\tNumber of Page Directory entries: %d\n", (int) numPageDirectoryEntries);
+    printf("\tNumber of Page Table entries: %d\n", (int) numPageTableEntries);
 
     pageDirectory = (pde_t *) malloc(numPageDirectoryEntries * sizeof(pde_t));
     for (i = 0; i < numPageDirectoryEntries; i++)
         pageDirectory[i] = NULL;
     pthread_mutex_unlock(&pageDirectoryLock);
+
+    printf("Initialization complete.\n");
 }
 
 
@@ -219,11 +230,16 @@ pte_t *Translate(pde_t *pgdir, void *va)
     /* HINT: Get the Page directory index (1st level) Then get the
     2nd-level-page table index using the virtual address. Using the page
     directory index and page table index get the physical address. */
+    printf("Translating virtual address: %x\n", (int) va);
 
     // Extract all necessary bits from the address va.
     uint32_t outerIndex = extractOuterBits(va);
     uint32_t innerIndex = extractInnerBits(va);
     uint32_t offset = extractOffsetBits(va);
+
+    printf("\tOuter index: %d\n", (int) outerIndex);
+    printf("\tInner index: %d\n", (int) innerIndex);
+    printf("\tOffset: %d\n", (int) offset);
 
     // Index into the Page Directory (1st level) to find the corresponding Page Table.
     pthread_mutex_lock(&pageDirectoryLock);
@@ -233,6 +249,7 @@ pte_t *Translate(pde_t *pgdir, void *va)
     // If the given entry in the Page Directory does not yet exist, translation fails.
     if (pageTable == NULL)
     {
+        printf("\tReturning NULL: no entry in Page Directory with index %d.\n", outerIndex);
         return NULL;
     }
 
@@ -244,11 +261,13 @@ pte_t *Translate(pde_t *pgdir, void *va)
     // If the given entry in the Page Table does not yet exist, translation fails.
     if (page == NULL)
     {
+        printf("\tReturning NULL: no entry in Page Table with index %d.\n", innerIndex);
         return NULL;
     }
 
     // physical address = address of physical page + offset.
     pte_t *physicalAddress = (pte_t *) page + offset;
+    printf("Translated virtual address %x to physical address %x.\n", (int) va, (int) physicalAddress);
 
     return physicalAddress;
 }
@@ -265,11 +284,16 @@ int PageMap(pde_t *pgdir, void *va, void *pa)
     /* HINT: Similar to Translate(), find the page directory (1st level)
     and page table (2nd-level) indices. If no mapping exists, set the
     virtual to physical mapping. */
+    printf("Mapping virtual address %x to physical address %x.\n", (int) va, (int) pa);
 
     // Extract all necessary bits from the address va.
     uint32_t outerIndex = extractOuterBits(va);
     uint32_t innerIndex = extractInnerBits(va);
     uint32_t offset = extractOffsetBits(va);
+
+    printf("\tOuter index: %d\n", (int) outerIndex);
+    printf("\tInner index: %d\n", (int) innerIndex);
+    printf("\tOffset: %d\n", (int) offset);
 
     // Index into the Page Directory (1st level) to find the corresponding Page Table.
     pde_t pageTable = indexPageDirectory(pgdir, outerIndex);
@@ -278,6 +302,7 @@ int PageMap(pde_t *pgdir, void *va, void *pa)
     if (pageTable == NULL)
     {
         // Allocate memory for a new Page Table, and save it to the Page Directory.
+        printf("\tAllocating new Page Directory entry: no entry in Page Directory with index %d.\n", outerIndex);
         pgdir[outerIndex] = (pde_t) malloc(numPageTableEntries * sizeof(pte_t));
         pageTable = pgdir[outerIndex];
     }
@@ -288,6 +313,8 @@ int PageMap(pde_t *pgdir, void *va, void *pa)
     // Set the mapping at the indexed virtual address to be the corresponding physical address.
     pageTable[innerIndex] = pa;
     page = pageTable[innerIndex];
+
+    printf("Mapped physical address %x to PDE %d, PTE %d.\n", (int) pa, (int) outerIndex, (int) innerIndex);
 
     // If the given entry in the Page Table does not yet exist, create an entry.
     // if (page == NULL)
@@ -307,6 +334,8 @@ Function that gets the next available virtual pages.
 void *get_next_avail_virt(int numPages)
 {
     /* Use virtual address bitmap to find the next free page. */
+    printf("Getting next %d available virtual pages.\n", numPages);
+
     unsigned long i, j;
     unsigned long startIndex = 0;
     int foundPages = 0;
@@ -334,6 +363,7 @@ void *get_next_avail_virt(int numPages)
         // If the needed number of free contiguous pages have been found, stop looking.
         if (foundPages == numPages)
         {
+            printf("\tFound %d contiguous virtual pages.\n", numPages);
             break;
         }
         // If the needed number of free contigious pages have not yet been found, reset the found count to 0 and keep looking from j.
@@ -347,6 +377,7 @@ void *get_next_avail_virt(int numPages)
     // If the needed number of free contiguous pages has not been found at all, return failure.
     if (foundPages < numPages)
     {
+        printf("\tReturning NULL: did not find %d contiguous virtual pages.\n", numPages);
         return NULL;
     }
 
@@ -358,6 +389,7 @@ void *get_next_avail_virt(int numPages)
 
     // Return the virtual address of the first page.
     // virtual address = index of bit * PGSIZE.
+    printf("Returning virtual address %x.\n", (int) (startIndex * PGSIZE));
     return (void *) (startIndex * PGSIZE);
 
     // Reserve 0x0000 for NULL
@@ -374,6 +406,8 @@ Function that gets the next available physical pages.
 int get_next_avail_phys(int numPages, void **physicalPages, int *physicalPageIndices)
 {
     /* Use physical address bitmap to find the next free page. */
+    printf("Getting next %d available physical pages.\n", numPages);
+
     unsigned long i;
     int foundPages = 0;
     for (i = 0; i < numPhysicalPages && foundPages < numPages; i++)
@@ -381,13 +415,16 @@ int get_next_avail_phys(int numPages, void **physicalPages, int *physicalPageInd
         // If this physical page is available, save its address and index.
         if (physicalBitmap[i] == 0)
         {
+            printf("\tPage #%d found at index %lu.\n", foundPages + 1, i);
             // physical address = index of bit * PGSIZE + offset of start of physical memory.
             physicalPages[foundPages] = (void *) (i * PGSIZE + (unsigned long) physicalMemory);
             physicalPageIndices[foundPages] = i;
+            printf("\t\tAddress of physical page: %x.\n", (int) physicalPages[foundPages]);
+            foundPages++;
         }
     }
-    
-    // Here, no physical address was found to be available.
+
+    printf("Found %d physical pages.\n", numPages);
     return foundPages;
 }
 
@@ -405,6 +442,8 @@ void *myalloc(unsigned int num_bytes)
     free pages are available, set the bitmaps and map a new page. Note, you will
     have to mark which physical pages are used. */
 
+    printf("Myallocing %u bytes.\n", num_bytes);
+
     // Upon first call, initialize library.
     // If this is the first call to myalloc, do some initialization.
 	if (__atomic_test_and_set((void *) &(isFirst), 0) == 0)
@@ -416,6 +455,7 @@ void *myalloc(unsigned int num_bytes)
 
     // Calculate the number of pages needed.
     int numPages = (int) ceil((double) num_bytes / PGSIZE);
+    printf("\tNumber of pages: %d.\n", numPages);
     
     // Check for free physical pages.
     void **physicalPages = malloc(numPages * sizeof(void *));
@@ -427,6 +467,7 @@ void *myalloc(unsigned int num_bytes)
     // If not enough physical pages are available, return NULL for failure.
     if (foundPhysicalPages < numPages)
     {
+        printf("\tReturning NULL: not enough physical pages. %d needed, %d found.\n", foundPhysicalPages, numPages);
         pthread_mutex_unlock(&physicalBitmapLock);
         free(physicalPages);
         free(physicalPageIndices);
@@ -440,6 +481,7 @@ void *myalloc(unsigned int num_bytes)
     // If not enough virtual pages are available, return NULL for failure.
     if (virtualPages == NULL)
     {
+        printf("\tReturning NULL: not enough contiguous virtual pages.\n");
         pthread_mutex_unlock(&physicalBitmapLock);
         pthread_mutex_unlock(&virtualBitmapLock);
         free(physicalPages);
@@ -448,6 +490,7 @@ void *myalloc(unsigned int num_bytes)
     }
 
     // Map the virtual addresses to physical addresses in the Page Directory.
+    printf("\tMapping virtual addresses to physical addresses for myalloc call.\n");
     pthread_mutex_lock(&pageDirectoryLock);
     for (i = 0; i < numPages; i++)
     {
@@ -456,22 +499,27 @@ void *myalloc(unsigned int num_bytes)
     pthread_mutex_unlock(&pageDirectoryLock);
 
     // Update the Physical Bitmap.
+    printf("\tUpdating the physical bitmap.\n");
     for (i = 0; i < numPages; i++)
     {
         physicalBitmap[physicalPageIndices[i]] = 1;
+        printf("\t\tUpdated physical bitmap at index %d.\n", physicalPageIndices[i]);
     }
     pthread_mutex_unlock(&physicalBitmapLock);
-    
 
     // Update the Virtual Bitmap.
+    printf("\tUpdating the virtual bitmap.\n");
     for (i = 0; i < numPages; i++)
     {
         virtualBitmap[(unsigned int) virtualPages / PGSIZE] = 1;
+        printf("\t\tUpdated virtual bitmap at index %u.\n", (unsigned int) virtualPages / PGSIZE);
     }
     pthread_mutex_unlock(&virtualBitmapLock);
 
     free(physicalPages);
     free(physicalPageIndices);
+
+    printf("Myalloc successful. Returning virtual address %x.\n", (int) virtualPages);
 
     return virtualPages;
 }
@@ -487,8 +535,11 @@ void myfree(void *va, int size)
 
     // Assume that myfree will be used correctly.
 
+    printf("Myfreeing %u bytes at address %x.\n", size, (int) va);
+
     // Calculate the number of pages needed to free.
     int numPages = (int) ceil((double) size / PGSIZE);
+    printf("\tNumber of pages: %d.\n", numPages);
 
     int i;
 
@@ -498,6 +549,7 @@ void myfree(void *va, int size)
     {
         void *physicalPage = Translate(pageDirectory, va + i);
         physicalBitmap[((unsigned long) physicalPage - (unsigned long) physicalMemory) / PGSIZE] = 0;
+        printf("\t\tUpdated physical bitmap at index %lu.\n", ((unsigned long) physicalPage - (unsigned long) physicalMemory) / PGSIZE);
         // physical address = index of bit * pagesize + offset of start of physical memory.
     }
     pthread_mutex_unlock(&physicalBitmapLock);
@@ -507,6 +559,7 @@ void myfree(void *va, int size)
     for (i = 0; i < numPages; i++)
     {
         virtualBitmap[(unsigned int) va / PGSIZE] = 0;
+        printf("\t\tUpdated virtual bitmap at index %u.\n", (unsigned int) va / PGSIZE);
     }
     pthread_mutex_unlock(&virtualBitmapLock);
 
@@ -514,9 +567,12 @@ void myfree(void *va, int size)
     pthread_mutex_lock(&pageDirectoryLock);
     for (i = 0; i < numPages; i++)
     {
+        printf("\t\tUpdating Page Directory at virtual address %x.\n", (int) (va + i));
         PageMap(pageDirectory, va + i, NULL);
     }
     pthread_mutex_unlock(&pageDirectoryLock);
+
+    printf("Myfree successful.\n");
 }
 
 
@@ -530,9 +586,12 @@ void PutVal(void *va, void *val, int size)
     the contents of "val" to a physical page. NOTE: The "size" value can be larger
     than one page. Therefore, you may have to find multiple pages using Translate()
     function. */
+    
+    printf("Putting value at %x into physical memory pointed to by virtual address %x.\n", (int) val, (int) va);
 
     // Calculate the number of pages needed to hold the data.
     int numPages = (int) ceil((double) size / PGSIZE);
+    printf("\tNumber of pages: %d.\n", numPages);
 
     int i;
 
@@ -541,10 +600,12 @@ void PutVal(void *va, void *val, int size)
     {
         // Get the Physical Page.
         void *physicalPage = Translate(pageDirectory, va + i);
+        printf("\tPhysical page address %d: %x.\n", i, (int) physicalPage);
         
         // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
         if (physicalPage == NULL)
         {
+            printf("\tReturning: no entry in Page Directory.");
             return;
         }
 
@@ -566,8 +627,11 @@ void GetVal(void *va, void *val, int size)
     If you are implementing TLB, always check first the presence of translation
     in TLB before proceeding forward. */
 
+    printf("Putting value at %x into physical memory pointed to by virtual address %x.\n", (int) va, (int) val);
+
     // Calculate the number of pages needed to hold the data.
     int numPages = (int) ceil((double) size / PGSIZE);
+    printf("\tNumber of pages: %d.\n", numPages);
 
     int i;
 
@@ -576,10 +640,12 @@ void GetVal(void *va, void *val, int size)
     {
         // Get the Physical Page.
         void *physicalPage = Translate(pageDirectory, va + i);
+        printf("\tPhysical page address %d: %x.\n", i, (int) physicalPage);
         
         // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
         if (physicalPage == NULL)
         {
+            printf("\tReturning: no entry in Page Directory.");
             return;
         }
 
