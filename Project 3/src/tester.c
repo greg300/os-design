@@ -75,8 +75,8 @@ int main()
     //printBits((uint32_t) &x);
     unsigned long x = 0x1004;
     printBits((u_int32_t) x);
-    printf("%u\n\n", extractInnerBits((void *) x));
     printf("%u\n\n", extractOuterBits((void *) x));
+    printf("%u\n\n", extractInnerBits((void *) x));
     printf("%u\n\n", extractOffsetBits((void *) x));
     // printf("%u\n\n", getBits((void *) &x, 1, 10));
     // printf("%u\n\n", getBits((void *) &x, 11, 20));

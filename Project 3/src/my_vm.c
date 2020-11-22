@@ -70,15 +70,15 @@ uint32_t extractOuterBits(void *addr)
 uint32_t extractInnerBits(void *addr)
 {
     int start = numPageBitsOuter + 1;
-    int end = start + numPageBitsInner;
+    int end = start + numPageBitsInner - 1;
     return getBits(addr, start, end);
 }
 
 
 uint32_t extractOffsetBits(void *addr)
 {
-    int start = numPageBitsOuter + numPageBitsInner + 2;
-    int end = start + numPageBitsOffset;
+    int start = numPageBitsOuter + numPageBitsInner + 1;
+    int end = start + numPageBitsOffset - 1;
     return getBits(addr, start, end);
 }
 
