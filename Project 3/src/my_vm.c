@@ -609,6 +609,7 @@ void PutVal(void *va, void *val, int size)
         }
 
         // Write the data.
+        printf("\tAttemping to write data from source address %x to destination %x.\n", (int) (val + i * PGSIZE), (int) physicalPage);
         pthread_mutex_lock(&physicalMemoryLock);
         memcpy(physicalPage, val + i * PGSIZE, PGSIZE);
         pthread_mutex_unlock(&physicalMemoryLock);
