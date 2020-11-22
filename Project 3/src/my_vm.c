@@ -307,8 +307,8 @@ Function that gets the next available virtual pages.
 void *get_next_avail_virt(int numPages)
 {
     /* Use virtual address bitmap to find the next free page. */
-    unsigned long long i, j;
-    unsigned long long startIndex = 0;
+    unsigned long i, j;
+    unsigned long startIndex = 0;
     int foundPages = 0;
     
     for (i = 1; i < numVirtualPages; i++)  // Ignore first entry, to reserve 0x0 for NULL.
@@ -374,7 +374,7 @@ Function that gets the next available physical pages.
 int get_next_avail_phys(int numPages, void **physicalPages, int *physicalPageIndices)
 {
     /* Use physical address bitmap to find the next free page. */
-    unsigned long long i;
+    unsigned long i;
     int foundPages = 0;
     for (i = 0; i < numPhysicalPages && foundPages < numPages; i++)
     {
@@ -382,7 +382,7 @@ int get_next_avail_phys(int numPages, void **physicalPages, int *physicalPageInd
         if (physicalBitmap[i] == 0)
         {
             // physical address = index of bit * PGSIZE + offset of start of physical memory.
-            physicalPages[foundPages] = (void *) (i * PGSIZE + (unsigned long long) physicalMemory);
+            physicalPages[foundPages] = (void *) (i * PGSIZE + (unsigned long) physicalMemory);
             physicalPageIndices[foundPages] = i;
         }
     }
@@ -451,7 +451,7 @@ void *myalloc(unsigned int num_bytes)
     pthread_mutex_lock(&pageDirectoryLock);
     for (i = 0; i < numPages; i++)
     {
-        PageMap(pageDirectory, &(virtualPages[i]), physicalPages[i]);
+        PageMap(pageDirectory, virtualPages + i, physicalPages[i]);
     }
     pthread_mutex_unlock(&pageDirectoryLock);
 
