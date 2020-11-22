@@ -1,17 +1,159 @@
 #include "my_vm.h"
 
+int isFirst = 0;  				        // For an atomic check as to whether myalloc() is being called for the first time.
+int numVirtualPages;                    // The number of virtual pages needed (given by MAX_MEMSIZE / PGSIZE).
+int numPhysicalPages;                   // The number of physical pages needed (given by MEMSIZE / PGSIZE).
+int numPageBitsOuter;                   // The number of bits to index into the outer Page Directory.
+int numPageBitsInner;                   // The number of bits to index into an inner Page Table.
+int numPageBitsOffset;                  // The number of bits needed to represent the physical offset.
+int numPageDirectoryEntries;            // The number of pde_t's per page directory (given by 2^numPageBitsOuter).
+int numPageTableEntries;                // The number of pte_t's per page table (given by 2^numPageBitsInner).
+char *virtualBitmap;                    // Array of chars, where each char represents a bit, and each bit is marked as 0 (free) or 1 (in use) for virtual memory.
+char *physicalBitmap;                   // Array of chars, where each char represents a bit, and each bit is marked as 0 (free) or 1 (in use) for physical memory.
+pde_t *pageDirectory;                   // The Page Directory; each entry is a pointer to a Page Table.
+void *physicalMemory;                   // The physical memory being simulated (size given by MEMSIZE).
+pthread_mutex_t pageDirectoryLock;      // Lock for the Page Directory.
+pthread_mutex_t physicalMemoryLock;     // Lock for Physical Memory.
+pthread_mutex_t virtualBitmapLock;      // Lock for the Virtual Bitmap.
+pthread_mutex_t physicalBitmapLock;     // Lock for the Physical Bitmap.
+
+
+void printBits(uint32_t x)
+{
+    unsigned int size = sizeof(uint32_t);
+    unsigned int maxPow = 1 << (size * 8 - 1);
+    int i;
+    for(i = 0; i < size * 8; ++i)
+    {
+        printf("%u", x & maxPow ? 1 : 0);
+        x = x << 1;
+    }
+    printf("\n");   
+}
+
+
+uint32_t createBitMask(int start, int end)
+{
+    uint32_t result = 0;
+    int i;
+    for (i = start; i <= end; i++)
+    {
+        result |= 1 << (32 - i);
+    }
+
+    return result;
+}
+
+
+uint32_t getBits(void *addr, int start, int end)
+{
+    uint32_t result;
+    uint32_t mask = createBitMask(start, end);
+
+    result = ((uint32_t) addr) & mask;
+    result >>= (32 - end);
+
+    return result;
+}
+
+
+uint32_t extractOuterBits(void *addr)
+{
+    int start = 1;
+    int end = numPageBitsOuter;
+    return getBits(addr, start, end);
+}
+
+
+uint32_t extractInnerBits(void *addr)
+{
+    int start = numPageBitsOuter + 1;
+    int end = start + numPageBitsInner;
+    return getBits(addr, start, end);
+}
+
+
+uint32_t extractOffsetBits(void *addr)
+{
+    int start = numPageBitsOuter + numPageBitsInner + 2;
+    int end = start + numPageBitsOffset;
+    return getBits(addr, start, end);
+}
+
+
 /*
-Function responsible for allocating and setting your physical memory
+Function responsible for allocating and setting your physical memory.
 */
 void SetPhysicalMem()
 {
-    //Allocate physical memory using mmap or malloc; this is the total size of
-    //your memory you are simulating
+    // Allocate physical memory using mmap or malloc; this is the total size of
+    // your memory you are simulating.
+
+    // HINT: Also calculate the number of physical and virtual pages and allocate
+    // virtual and physical bitmaps and initialize them.
+    int i;
+
+    // Initialize mutexes.
+    pthread_mutex_init(&physicalMemoryLock, NULL);
+    pthread_mutex_init(&physicalBitmapLock, NULL);
+    pthread_mutex_init(&virtualBitmapLock, NULL);
+    pthread_mutex_init(&pageDirectoryLock, NULL);
+
+    // Lock all mutexes until their part of the initialization process is complete.
+    pthread_mutex_lock(&physicalMemoryLock);
+    pthread_mutex_lock(&physicalBitmapLock);
+    pthread_mutex_lock(&virtualBitmapLock);
+    pthread_mutex_lock(&pageDirectoryLock);
+
+    // 1. malloc MEMSIZE memory.
+    physicalMemory = malloc(MEMSIZE);
+    pthread_mutex_unlock(&physicalMemoryLock);
+
+    // 2. Calculate number of virtual and physical pages.
+    // # of physical pages = MEMSIZE / size of single page (PGSIZE).
+    numPhysicalPages = MEMSIZE / PGSIZE;
+    // # of virtual pages = MAX_MEMSIZE / size of a single page (PGSIZE).
+    numVirtualPages = MAX_MEMSIZE / PGSIZE;
 
 
-    //HINT: Also calculate the number of physical and virtual pages and allocate
-    //virtual and physical bitmaps and initialize them
+    // 3. Initialize physical and virtual bitmaps.
+    // Phsyical bitmap would be numPhysicalPages size.
+    physicalBitmap = (char *) malloc(numPhysicalPages * sizeof(char));
+    for (i = 0; i < numPhysicalPages; i++)
+        physicalBitmap[i] = 0;
+    pthread_mutex_unlock(&physicalBitmapLock);
 
+    // Virtual bitmap wold be numVirtualPages size.
+    virtualBitmap = (char *) malloc(numVirtualPages * sizeof(char));
+    for (i = 0; i < numVirtualPages; i++)
+        virtualBitmap[i] = 0;
+    pthread_mutex_unlock(&virtualBitmapLock);
+
+    // 4. Initialize page directory (array of pde_t pointers).
+    // Number of bits needed for offset is given by log base 2 of PGSIZE.
+    numPageBitsOffset = (int) log2(PGSIZE);
+    // If the offset is even, VPN bits are even and can be evenly split.
+    if (numPageBitsOffset % 2 == 0)
+    {
+        numPageBitsOuter = (32 - numPageBitsOffset) / 2;
+        numPageBitsInner = (32 - numPageBitsOffset) / 2;
+    }
+    // If the offset is odd, VPN bits are odd and cannot be evenly split.
+    else
+    {
+        numPageBitsOuter = (32 - numPageBitsOffset) / 2 + 1;
+        numPageBitsInner = (32 - numPageBitsOffset) / 2;
+    }
+    
+    // The number of pde_t's per page directory is given by 2^numPageBitsOuter.
+    numPageDirectoryEntries = exp2(numPageBitsOuter);
+    // The number of pte_t's per page table is given by 2^numPageBitsInner.
+    numPageTableEntries = exp2(numPageBitsInner);
+
+    pageDirectory = (pde_t *) malloc(numPageDirectoryEntries * sizeof(pde_t));
+    for (i = 0; i < numPageDirectoryEntries; i++)
+        pageDirectory[i] = NULL;
+    pthread_mutex_unlock(&pageDirectoryLock);
 }
 
 
@@ -58,14 +200,15 @@ void print_TLB_missrate()
 
 /*
 The function takes a virtual address and page directories starting address and
-performs translation to return the physical address
+performs translation to return the physical address.
 */
-pte_t * Translate(pde_t *pgdir, void *va)
+pte_t *Translate(pde_t *pgdir, void *va)
 {
-    //HINT: Get the Page directory index (1st level) Then get the
-    //2nd-level-page table index using the virtual address.  Using the page
-    //directory index and page table index get the physical address
+    // HINT: Get the Page directory index (1st level) Then get the
+    // 2nd-level-page table index using the virtual address.  Using the page
+    // directory index and page table index get the physical address.
 
+    // physical address = address of physical page + offset
 
     //If translation not successfull
     return NULL;
@@ -88,12 +231,32 @@ int PageMap(pde_t *pgdir, void *va, void *pa)
 }
 
 
-/*Function that gets the next available page
+/*Function that gets the next available virtual page
 */
-void *get_next_avail(int num_pages)
+void *get_next_avail_virt(int num_pages)
 {
 
     //Use virtual address bitmap to find the next free page
+
+    // Reserve 0x0000 for NULL
+    // 0x1000 – start
+
+    // virtual address = index of bit * pagesize
+    // 1 * 4kb = 0x1000
+    // 6 * 4kb = 0x6000
+}
+
+
+/*Function that gets the next available physical page
+*/
+void *get_next_avail_phys()
+{
+
+    //Use virtual address bitmap to find the next free page
+
+    // physical address = index of bit * pagesize + offset of start of physical memory
+    // 1 * 4kb = 0x1000
+    // 6 * 4kb = 0x6000
 }
 
 
@@ -109,6 +272,13 @@ void *myalloc(unsigned int num_bytes)
    free pages are available, set the bitmaps and map a new page. Note, you will
    have to mark which physical pages are used. */
 
+   // Upon first call, initialize library.
+   // If this is the first call to myalloc, do some initialization.
+	if (__atomic_test_and_set((void *) &(isFirst), 0) == 0)
+    {
+        SetPhysicalMem();
+    }
+
     return NULL;
 }
 
@@ -119,6 +289,8 @@ void myfree(void *va, int size)
     //Free the page table entries starting from this virtual address (va)
     // Also mark the pages free in the bitmap
     //Only free if the memory from "va" to va+size is valid
+
+    // Assume that myfree will be used correctly.
 }
 
 
@@ -131,6 +303,8 @@ void PutVal(void *va, void *val, int size)
        the contents of "val" to a physical page. NOTE: The "size" value can be larger
        than one page. Therefore, you may have to find multiple pages using Translate()
        function.*/
+
+    // Use memcpy
 
 }
 

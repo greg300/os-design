@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
+#include <math.h>
+#include <pthread.h>
 
 // Assume the address space is 32 bits, so the max memory size is 4GB
 // Page size is 4KB
@@ -17,10 +20,10 @@
 #define MEMSIZE 1024*1024*1024
 
 // Represents a page table entry
-typedef unsigned long pte_t;
+typedef void* pte_t;
 
 // Represents a page directory entry
-typedef unsigned long pde_t;
+typedef pte_t* pde_t;
 
 #define TLB_SIZE 120
 
@@ -35,7 +38,7 @@ struct tlb tlb_store;
 
 
 void SetPhysicalMem();
-pte_t* Translate(pde_t *pgdir, void *va);
+pte_t *Translate(pde_t *pgdir, void *va);
 int PageMap(pde_t *pgdir, void *va, void* pa);
 bool check_in_tlb(void *va);
 void put_in_tlb(void *va, void *pa);
