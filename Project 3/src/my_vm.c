@@ -81,13 +81,25 @@ uint32_t extractOffsetBits(void *addr)
 }
 
 
+pde_t indexPageDirectory(pde_t *pgdir, uint32_t outerIndex)
+{
+    return pgdir[outerIndex];
+}
+
+
+pte_t indexPageTable(pde_t pageTable, uint32_t innerIndex)
+{
+    return pageTable[innerIndex];
+}
+
+
 /*
 Function responsible for allocating and setting your physical memory.
 */
 void SetPhysicalMem()
 {
-    // Allocate physical memory using mmap or malloc; this is the total size of
-    // your memory you are simulating.
+    /* Allocate physical memory using mmap or malloc; this is the total size of
+    your memory you are simulating. */
 
     // HINT: Also calculate the number of physical and virtual pages and allocate
     // virtual and physical bitmaps and initialize them.
@@ -114,7 +126,6 @@ void SetPhysicalMem()
     numPhysicalPages = MEMSIZE / PGSIZE;
     // # of virtual pages = MAX_MEMSIZE / size of a single page (PGSIZE).
     numVirtualPages = MAX_MEMSIZE / PGSIZE;
-
 
     // 3. Initialize physical and virtual bitmaps.
     // Phsyical bitmap would be numPhysicalPages size.
@@ -163,7 +174,7 @@ void SetPhysicalMem()
  */
 int add_TLB(void *va, void *pa)
 {
-    /*Part 2 HINT: Add a virtual to physical page translation to the TLB */
+    /* Part 2 HINT: Add a virtual to physical page translation to the TLB. */
 
     return -1;
 }
@@ -176,7 +187,7 @@ int add_TLB(void *va, void *pa)
  */
 pte_t * check_TLB(void *va)
 {
-    /* Part 2: TLB lookup code here */
+    /* Part 2: TLB lookup code here. */
 
 }
 
@@ -189,7 +200,7 @@ void print_TLB_missrate()
 {
     double miss_rate = 0;
 
-    /*Part 2 Code here to calculate and print the TLB miss rate*/
+    /* Part 2: Code here to calculate and print the TLB miss rate. */
 
 
 
@@ -204,14 +215,41 @@ performs translation to return the physical address.
 */
 pte_t *Translate(pde_t *pgdir, void *va)
 {
-    // HINT: Get the Page directory index (1st level) Then get the
-    // 2nd-level-page table index using the virtual address.  Using the page
-    // directory index and page table index get the physical address.
+    /* HINT: Get the Page directory index (1st level) Then get the
+    2nd-level-page table index using the virtual address. Using the page
+    directory index and page table index get the physical address. */
 
-    // physical address = address of physical page + offset
+    // Extract all necessary bits from the address va.
+    uint32_t outerIndex = extractOuterBits(va);
+    uint32_t innerIndex = extractInnerBits(va);
+    uint32_t offset = extractOffsetBits(va);
 
-    //If translation not successfull
-    return NULL;
+    // Index into the Page Directory (1st level) to find the corresponding Page Table.
+    pthread_mutex_lock(&pageDirectoryLock);
+    pde_t pageTable = indexPageDirectory(pgdir, outerIndex);
+    pthread_mutex_unlock(&pageDirectoryLock);
+
+    // If the given entry in the Page Directory does not yet exist, translation fails.
+    if (pageTable == NULL)
+    {
+        return NULL;
+    }
+
+    // Index into the found Page Table.
+    pthread_mutex_lock(&pageDirectoryLock);
+    pte_t page = indexPageTable(pageTable, innerIndex);
+    pthread_mutex_unlock(&pageDirectoryLock);
+
+    // If the given entry in the Page Table does not yet exist, translation fails.
+    if (page == NULL)
+    {
+        return NULL;
+    }
+
+    // physical address = address of physical page + offset.
+    pte_t *physicalAddress = (pte_t *) page + offset;
+
+    return physicalAddress;
 }
 
 
@@ -219,97 +257,222 @@ pte_t *Translate(pde_t *pgdir, void *va)
 The function takes a page directory address, virtual address, physical address
 as an argument, and sets a page table entry. This function will walk the page
 directory to see if there is an existing mapping for a virtual address. If the
-virtual address is not present, then a new entry will be added
+virtual address is not present, then a new entry will be added.
 */
 int PageMap(pde_t *pgdir, void *va, void *pa)
 {
-    /*HINT: Similar to Translate(), find the page directory (1st level)
+    /* HINT: Similar to Translate(), find the page directory (1st level)
     and page table (2nd-level) indices. If no mapping exists, set the
-    virtual to physical mapping */
+    virtual to physical mapping. */
 
-    return -1;
+    // Extract all necessary bits from the address va.
+    uint32_t outerIndex = extractOuterBits(va);
+    uint32_t innerIndex = extractInnerBits(va);
+    uint32_t offset = extractOffsetBits(va);
+
+    // Index into the Page Directory (1st level) to find the corresponding Page Table.
+    pthread_mutex_lock(&pageDirectoryLock);
+    pde_t pageTable = indexPageDirectory(pgdir, outerIndex);
+    pthread_mutex_unlock(&pageDirectoryLock);
+
+    // If the given entry in the Page Directory does not yet exist, create an entry.
+    if (pageTable == NULL)
+    {
+        // Allocate memory for a new Page Table, and save it to the Page Directory.
+        pthread_mutex_lock(&pageDirectoryLock);
+        pgdir[outerIndex] = (pde_t) malloc(numPageTableEntries * sizeof(pte_t));
+        pageTable = pgdir[outerIndex];
+        pthread_mutex_unlock(&pageDirectoryLock);
+    }
+
+    // Index into the found or created Page Table.
+    pthread_mutex_lock(&pageDirectoryLock);
+    pte_t page = indexPageTable(pageTable, innerIndex);
+    pthread_mutex_unlock(&pageDirectoryLock);
+
+    // If the given entry in the Page Table does not yet exist, create an entry.
+    if (page == NULL)
+    {
+        // Set the mapping at the indexed virtual address to be the corresponding physical address.
+        pthread_mutex_lock(&pageDirectoryLock);
+        pageTable[innerIndex] = pa;
+        page = pageTable[innerIndex];
+        pthread_mutex_unlock(&pageDirectoryLock);
+        
+        // Update the virtual bitmap.
+        // pthread_mutex_lock(&virtualBitmapLock);
+        // virtualBitmap[outerIndex * numPageTableEntries + innerIndex] = 1;
+        // pthread_mutex_unlock(&virtualBitmapLock);
+    }
+
+    return 1;
 }
 
 
-/*Function that gets the next available virtual page
+/*
+Function that gets the next available virtual page.
 */
-void *get_next_avail_virt(int num_pages)
+void *get_next_avail_virt(int numPages)
 {
+    /* Use virtual address bitmap to find the next free page. */
+    unsigned long long i, j;
+    unsigned long long startIndex = 0;
+    int foundPages = 0;
+    pthread_mutex_lock(&virtualBitmapLock);
+    for (i = 1; i < numVirtualPages; i++)  // Ignore first entry, to reserve 0x0 for NULL.
+    {
+        // If the page at index i is free, count it, save the index, and look for contiguous free pages, if needed.
+        if (virtualBitmap[i] == 0)
+        {
+            foundPages++;
+            startIndex = i;
+            for (j = 0; j < numVirtualPages && foundPages < numPages; j++)
+            {
+                if (virtualBitmap[j] == 0)
+                {
+                    foundPages++;
+                }
+                else
+                {
+                    break;
+                }
+                
+            }
+        }
+        // If the needed number of free contiguous pages have been found, stop looking.
+        if (foundPages == numPages)
+        {
+            break;
+        }
+        // If the needed number of free contigious pages have not yet been found, reset the found count to 0 and keep looking from j.
+        else
+        {
+            foundPages = 0;
+            i = j;
+        }
+    }
+    
+    // If the needed number of free contiguous pages has not been found at all, return failure.
+    if (foundPages < numPages)
+    {
+        pthread_mutex_unlock(&virtualBitmapLock);
+        return NULL;
+    }
 
-    //Use virtual address bitmap to find the next free page
+    // Mark chosen pages as used in the Virtual Bitmap.
+    for (i = 0; i < foundPages; i++)
+    {
+        virtualBitmap[startIndex + i] = 1;
+    }
+
+    pthread_mutex_unlock(&virtualBitmapLock);
+
+    // Return the virtual address of the first page.
+    // virtual address = index of bit * PGSIZE.
+    return startIndex * PGSIZE;
 
     // Reserve 0x0000 for NULL
     // 0x1000 – start
 
-    // virtual address = index of bit * pagesize
     // 1 * 4kb = 0x1000
     // 6 * 4kb = 0x6000
 }
 
 
-/*Function that gets the next available physical page
+/*
+Function that gets the next available physical page.
 */
 void *get_next_avail_phys()
 {
-
-    //Use virtual address bitmap to find the next free page
-
-    // physical address = index of bit * pagesize + offset of start of physical memory
-    // 1 * 4kb = 0x1000
-    // 6 * 4kb = 0x6000
+    /* Use physical address bitmap to find the next free page. */
+    unsigned long long i;
+    pthread_mutex_lock(&physicalBitmapLock);
+    for (i = 0; i < numPhysicalPages; i++)
+    {
+        // If this physical page is available, return its address.
+        if (physicalBitmap[i] == 0)
+        {
+            physicalBitmap[i] = 1;
+            // physical address = index of bit * pagesize + offset of start of physical memory.
+            pthread_mutex_unlock(&physicalBitmapLock);
+            return i * PGSIZE + (unsigned long long) physicalMemory;
+        }
+    }
+    
+    // Here, no physical address was found to be available.
+    pthread_mutex_unlock(&physicalBitmapLock);
+    return NULL;
 }
 
 
-/* Function responsible for allocating pages
-and used by the benchmark
+/*
+Function responsible for allocating pages
+and used by the benchmark.
 */
 void *myalloc(unsigned int num_bytes)
 {
-    //HINT: If the physical memory is not yet initialized, then allocate and initialize.
+    /* HINT: If the physical memory is not yet initialized, then allocate and initialize. */
 
-   /* HINT: If the page directory is not initialized, then initialize the
-   page directory. Next, using get_next_avail(), check if there are free pages. If
-   free pages are available, set the bitmaps and map a new page. Note, you will
-   have to mark which physical pages are used. */
+    /* HINT: If the page directory is not initialized, then initialize the
+    page directory. Next, using get_next_avail(), check if there are free pages. If
+    free pages are available, set the bitmaps and map a new page. Note, you will
+    have to mark which physical pages are used. */
 
-   // Upon first call, initialize library.
-   // If this is the first call to myalloc, do some initialization.
+    // Upon first call, initialize library.
+    // If this is the first call to myalloc, do some initialization.
 	if (__atomic_test_and_set((void *) &(isFirst), 0) == 0)
     {
         SetPhysicalMem();
     }
 
+    // Calculate the number of pages needed.
+    int numPages = (int) ceil((double) num_bytes / PGSIZE);
+
+    // Check for free physical pages.
+    
+    // Check for free virtual pages.
+
+    // Map the virtual addresses to physical addresses in the Page Directory.
+
+    // Update the bitmaps.
+
+    // If no free virtual pages, "free" marked physical pages in Physical Bitmap.
+
     return NULL;
 }
 
-/* Responsible for releasing one or more memory pages using virtual address (va)
+/*
+Responsible for releasing one or more memory pages using virtual address (va)
 */
 void myfree(void *va, int size)
 {
-    //Free the page table entries starting from this virtual address (va)
-    // Also mark the pages free in the bitmap
-    //Only free if the memory from "va" to va+size is valid
+    /* Free the page table entries starting from this virtual address (va).
+    Also mark the pages free in the bitmap.
+    Only free if the memory from "va" to va+size is valid. */
 
     // Assume that myfree will be used correctly.
 }
 
 
-/* The function copies data pointed by "val" to physical
- * memory pages using virtual address (va)
+/*
+The function copies data pointed by "val" to physical
+memory pages using virtual address (va).
 */
 void PutVal(void *va, void *val, int size)
 {
     /* HINT: Using the virtual address and Translate(), find the physical page. Copy
        the contents of "val" to a physical page. NOTE: The "size" value can be larger
        than one page. Therefore, you may have to find multiple pages using Translate()
-       function.*/
+       function. */
 
     // Use memcpy
 
 }
 
 
-/* Given a virtual address, this function copies the contents of the page to val */
+/*
+Given a virtual address, this function copies the contents of the page to val
+*/
 void GetVal(void *va, void *val, int size)
 {
     /* HINT: put the values pointed to by "va" inside the physical memory at given
