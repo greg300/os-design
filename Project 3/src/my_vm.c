@@ -645,7 +645,7 @@ void GetVal(void *va, void *val, int size)
         // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
         if (physicalPage == NULL)
         {
-            printf("\tReturning: no entry in Page Directory.");
+            printf("\tReturning: no entry in Page Directory.\n");
             return;
         }
 
