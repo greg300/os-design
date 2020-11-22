@@ -290,7 +290,7 @@ int PageMap(pde_t *pgdir, void *va, void *pa)
     virtual to physical mapping. */
     //printf("Mapping virtual address %x to physical address %x.\n", (int) va, (int) pa);
 
-    printBits((u_int32_t) va);
+    //printBits((u_int32_t) va);
     //printf("-----------------------------\n");
     // Extract all necessary bits from the address va.
     uint32_t outerIndex = extractOuterBits(va);
