@@ -189,6 +189,7 @@ pte_t * check_TLB(void *va)
 {
     /* Part 2: TLB lookup code here. */
 
+    return NULL;
 }
 
 
@@ -271,46 +272,37 @@ int PageMap(pde_t *pgdir, void *va, void *pa)
     uint32_t offset = extractOffsetBits(va);
 
     // Index into the Page Directory (1st level) to find the corresponding Page Table.
-    pthread_mutex_lock(&pageDirectoryLock);
     pde_t pageTable = indexPageDirectory(pgdir, outerIndex);
-    pthread_mutex_unlock(&pageDirectoryLock);
 
     // If the given entry in the Page Directory does not yet exist, create an entry.
     if (pageTable == NULL)
     {
         // Allocate memory for a new Page Table, and save it to the Page Directory.
-        pthread_mutex_lock(&pageDirectoryLock);
         pgdir[outerIndex] = (pde_t) malloc(numPageTableEntries * sizeof(pte_t));
         pageTable = pgdir[outerIndex];
-        pthread_mutex_unlock(&pageDirectoryLock);
     }
 
     // Index into the found or created Page Table.
-    pthread_mutex_lock(&pageDirectoryLock);
     pte_t page = indexPageTable(pageTable, innerIndex);
-    pthread_mutex_unlock(&pageDirectoryLock);
+
+    // Set the mapping at the indexed virtual address to be the corresponding physical address.
+    pageTable[innerIndex] = pa;
+    page = pageTable[innerIndex];
 
     // If the given entry in the Page Table does not yet exist, create an entry.
-    if (page == NULL)
-    {
-        // Set the mapping at the indexed virtual address to be the corresponding physical address.
-        pthread_mutex_lock(&pageDirectoryLock);
-        pageTable[innerIndex] = pa;
-        page = pageTable[innerIndex];
-        pthread_mutex_unlock(&pageDirectoryLock);
-        
-        // Update the virtual bitmap.
-        // pthread_mutex_lock(&virtualBitmapLock);
-        // virtualBitmap[outerIndex * numPageTableEntries + innerIndex] = 1;
-        // pthread_mutex_unlock(&virtualBitmapLock);
-    }
+    // if (page == NULL)
+    // {
+    //     // Set the mapping at the indexed virtual address to be the corresponding physical address.
+    //     pageTable[innerIndex] = pa;
+    //     page = pageTable[innerIndex];
+    // }
 
     return 1;
 }
 
 
 /*
-Function that gets the next available virtual page.
+Function that gets the next available virtual pages.
 */
 void *get_next_avail_virt(int numPages)
 {
@@ -318,7 +310,7 @@ void *get_next_avail_virt(int numPages)
     unsigned long long i, j;
     unsigned long long startIndex = 0;
     int foundPages = 0;
-    pthread_mutex_lock(&virtualBitmapLock);
+    
     for (i = 1; i < numVirtualPages; i++)  // Ignore first entry, to reserve 0x0 for NULL.
     {
         // If the page at index i is free, count it, save the index, and look for contiguous free pages, if needed.
@@ -355,7 +347,6 @@ void *get_next_avail_virt(int numPages)
     // If the needed number of free contiguous pages has not been found at all, return failure.
     if (foundPages < numPages)
     {
-        pthread_mutex_unlock(&virtualBitmapLock);
         return NULL;
     }
 
@@ -365,11 +356,9 @@ void *get_next_avail_virt(int numPages)
         virtualBitmap[startIndex + i] = 1;
     }
 
-    pthread_mutex_unlock(&virtualBitmapLock);
-
     // Return the virtual address of the first page.
     // virtual address = index of bit * PGSIZE.
-    return startIndex * PGSIZE;
+    return (void *) (startIndex * PGSIZE);
 
     // Reserve 0x0000 for NULL
     // 0x1000 – start
@@ -380,28 +369,26 @@ void *get_next_avail_virt(int numPages)
 
 
 /*
-Function that gets the next available physical page.
+Function that gets the next available physical pages.
 */
-void *get_next_avail_phys()
+int get_next_avail_phys(int numPages, void **physicalPages, int *physicalPageIndices)
 {
     /* Use physical address bitmap to find the next free page. */
     unsigned long long i;
-    pthread_mutex_lock(&physicalBitmapLock);
-    for (i = 0; i < numPhysicalPages; i++)
+    int foundPages = 0;
+    for (i = 0; i < numPhysicalPages && foundPages < numPages; i++)
     {
-        // If this physical page is available, return its address.
+        // If this physical page is available, save its address and index.
         if (physicalBitmap[i] == 0)
         {
-            physicalBitmap[i] = 1;
-            // physical address = index of bit * pagesize + offset of start of physical memory.
-            pthread_mutex_unlock(&physicalBitmapLock);
-            return i * PGSIZE + (unsigned long long) physicalMemory;
+            // physical address = index of bit * PGSIZE + offset of start of physical memory.
+            physicalPages[foundPages] = (void *) (i * PGSIZE + (unsigned long long) physicalMemory);
+            physicalPageIndices[foundPages] = i;
         }
     }
     
     // Here, no physical address was found to be available.
-    pthread_mutex_unlock(&physicalBitmapLock);
-    return NULL;
+    return foundPages;
 }
 
 
@@ -425,24 +412,72 @@ void *myalloc(unsigned int num_bytes)
         SetPhysicalMem();
     }
 
+    int i;
+
     // Calculate the number of pages needed.
     int numPages = (int) ceil((double) num_bytes / PGSIZE);
-
+    
     // Check for free physical pages.
+    void **physicalPages = malloc(numPages * sizeof(void *));
+    int *physicalPageIndices = malloc(numPages * sizeof(int));
+
+    pthread_mutex_lock(&physicalBitmapLock);
+    int foundPhysicalPages = get_next_avail_phys(numPages, physicalPages, physicalPageIndices);
+
+    // If not enough physical pages are available, return NULL for failure.
+    if (foundPhysicalPages < numPages)
+    {
+        pthread_mutex_unlock(&physicalBitmapLock);
+        free(physicalPages);
+        free(physicalPageIndices);
+        return NULL;
+    }
     
     // Check for free virtual pages.
+    pthread_mutex_lock(&virtualBitmapLock);
+    void *virtualPages = get_next_avail_virt(numPages);
+
+    // If not enough virtual pages are available, return NULL for failure.
+    if (virtualPages == NULL)
+    {
+        pthread_mutex_unlock(&physicalBitmapLock);
+        pthread_mutex_unlock(&virtualBitmapLock);
+        free(physicalPages);
+        free(physicalPageIndices);
+        return NULL;
+    }
 
     // Map the virtual addresses to physical addresses in the Page Directory.
+    pthread_mutex_lock(&pageDirectoryLock);
+    for (i = 0; i < numPages; i++)
+    {
+        PageMap(pageDirectory, &(virtualPages[i]), physicalPages[i]);
+    }
+    pthread_mutex_unlock(&pageDirectoryLock);
 
-    // Update the bitmaps.
+    // Update the Physical Bitmap.
+    for (i = 0; i < numPages; i++)
+    {
+        physicalBitmap[physicalPageIndices[i]] = 1;
+    }
+    pthread_mutex_unlock(&physicalBitmapLock);
+    
 
-    // If no free virtual pages, "free" marked physical pages in Physical Bitmap.
+    // Update the Virtual Bitmap.
+    for (i = 0; i < numPages; i++)
+    {
+        virtualBitmap[(unsigned int) virtualPages / PGSIZE] = 1;
+    }
+    pthread_mutex_unlock(&virtualBitmapLock);
 
-    return NULL;
+    free(physicalPages);
+    free(physicalPageIndices);
+
+    return virtualPages;
 }
 
 /*
-Responsible for releasing one or more memory pages using virtual address (va)
+Responsible for releasing one or more memory pages using virtual address (va).
 */
 void myfree(void *va, int size)
 {
@@ -451,6 +486,37 @@ void myfree(void *va, int size)
     Only free if the memory from "va" to va+size is valid. */
 
     // Assume that myfree will be used correctly.
+
+    // Calculate the number of pages needed to free.
+    int numPages = (int) ceil((double) size / PGSIZE);
+
+    int i;
+
+    // Update the Physical Bitmap.
+    pthread_mutex_lock(&physicalBitmapLock);
+    for (i = 0; i < numPages; i++)
+    {
+        void *physicalPage = Translate(pageDirectory, va + i);
+        physicalBitmap[((unsigned long) physicalPage - (unsigned long) physicalMemory) / PGSIZE] = 0;
+        // physical address = index of bit * pagesize + offset of start of physical memory.
+    }
+    pthread_mutex_unlock(&physicalBitmapLock);
+
+    // Update the Virtual Bitmap.
+    pthread_mutex_lock(&virtualBitmapLock);
+    for (i = 0; i < numPages; i++)
+    {
+        virtualBitmap[(unsigned int) va / PGSIZE] = 0;
+    }
+    pthread_mutex_unlock(&virtualBitmapLock);
+
+    // Update the Page Directory.
+    pthread_mutex_lock(&pageDirectoryLock);
+    for (i = 0; i < numPages; i++)
+    {
+        PageMap(pageDirectory, va + i, NULL);
+    }
+    pthread_mutex_unlock(&pageDirectoryLock);
 }
 
 
@@ -461,24 +527,67 @@ memory pages using virtual address (va).
 void PutVal(void *va, void *val, int size)
 {
     /* HINT: Using the virtual address and Translate(), find the physical page. Copy
-       the contents of "val" to a physical page. NOTE: The "size" value can be larger
-       than one page. Therefore, you may have to find multiple pages using Translate()
-       function. */
+    the contents of "val" to a physical page. NOTE: The "size" value can be larger
+    than one page. Therefore, you may have to find multiple pages using Translate()
+    function. */
 
-    // Use memcpy
+    // Calculate the number of pages needed to hold the data.
+    int numPages = (int) ceil((double) size / PGSIZE);
 
+    int i;
+
+    // For each virtual page, find the corresponding physical page and write the data.
+    for (i = 0; i < numPages; i++)
+    {
+        // Get the Physical Page.
+        void *physicalPage = Translate(pageDirectory, va + i);
+        
+        // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
+        if (physicalPage == NULL)
+        {
+            return;
+        }
+
+        // Write the data.
+        pthread_mutex_lock(&physicalMemoryLock);
+        memcpy(physicalPage, val + i * PGSIZE, PGSIZE);
+        pthread_mutex_unlock(&physicalMemoryLock);
+    }
 }
 
 
 /*
-Given a virtual address, this function copies the contents of the page to val
+Given a virtual address, this function copies the contents of the page to val.
 */
 void GetVal(void *va, void *val, int size)
 {
     /* HINT: put the values pointed to by "va" inside the physical memory at given
     "val" address. Assume you can access "val" directly by derefencing them.
-    If you are implementing TLB,  always check first the presence of translation
-    in TLB before proceeding forward */
+    If you are implementing TLB, always check first the presence of translation
+    in TLB before proceeding forward. */
+
+    // Calculate the number of pages needed to hold the data.
+    int numPages = (int) ceil((double) size / PGSIZE);
+
+    int i;
+
+    // For each virtual page, find the corresponding physical page and write the data.
+    for (i = 0; i < numPages; i++)
+    {
+        // Get the Physical Page.
+        void *physicalPage = Translate(pageDirectory, va + i);
+        
+        // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
+        if (physicalPage == NULL)
+        {
+            return;
+        }
+
+        // Write the data.
+        pthread_mutex_lock(&physicalMemoryLock);
+        memcpy(val + i * PGSIZE, physicalPage, PGSIZE);
+        pthread_mutex_unlock(&physicalMemoryLock);
+    }
 }
 
 
@@ -493,5 +602,22 @@ void MatMult(void *mat1, void *mat2, int size, void *answer)
     matrix accessed. Similar to the code in test.c, you will use GetVal() to
     load each element and perform multiplication. Take a look at test.c! In addition to
     getting the values from two matrices, you will perform multiplication and
-    store the result to the "answer array"*/
+    store the result to the "answer array". */
+
+    int i, j;
+    int mat1Address = 0, mat2Address = 0, matResultAddress = 0;
+    int x, y, z;
+    for (i = 0; i < size; i++)
+    {
+        for (j = 0; j < size; j++)
+        {
+            mat1Address = (unsigned int) mat1 + ((i * size * sizeof(int))) + (j * sizeof(int));
+            mat2Address = (unsigned int) mat2 + ((i * size * sizeof(int))) + (j * sizeof(int));
+            matResultAddress = (unsigned int) answer + ((i * size * sizeof(int))) + (j * sizeof(int));
+            GetVal((void *) mat1Address, &x, sizeof(int));
+            GetVal((void *) mat2Address, &y, sizeof(int));
+            z = x * y;
+            PutVal((void *) matResultAddress, &(z), sizeof(int));
+        }
+    }
 }
