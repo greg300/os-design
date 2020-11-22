@@ -662,7 +662,7 @@ void GetVal(void *va, void *val, int size)
         // Write the data.
         bytesToWrite = bytesRemaining > PGSIZE ? PGSIZE : size % PGSIZE;
         pthread_mutex_lock(&physicalMemoryLock);
-        memcpy(val + i * PGSIZE, physicalPage, PGSIZE);
+        memcpy(val + i * PGSIZE, physicalPage, bytesToWrite);
         pthread_mutex_unlock(&physicalMemoryLock);
         bytesRemaining -= bytesToWrite;
     }
