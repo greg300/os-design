@@ -366,11 +366,10 @@ void *get_next_avail_virt(int numPages)
             printf("\tFound %d contiguous virtual pages.\n", numPages);
             break;
         }
-        // If the needed number of free contigious pages have not yet been found, reset the found count to 0 and keep looking from j.
+        // If the needed number of free contigious pages have not yet been found, reset the found count to 0 and keep looking.
         else
         {
             foundPages = 0;
-            i = j;
         }
     }
     
@@ -605,7 +604,7 @@ void PutVal(void *va, void *val, int size)
         // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
         if (physicalPage == NULL)
         {
-            printf("\tReturning: no entry in Page Directory.");
+            printf("\tReturning: no entry in Page Directory.\n");
             return;
         }
 
