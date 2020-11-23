@@ -769,7 +769,7 @@ void PutVal(void *va, void *val, int size)
     for (i = 0; i < numPages; i++)
     {
         // Get the Physical Page.
-        void *physicalPage = Translate(pageDirectory, va + i);
+        void *physicalPage = Translate(pageDirectory, va + i * PGSIZE);
         //printf("\tPhysical page address %d: %x.\n", i, (int) physicalPage);
         
         // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
@@ -813,7 +813,7 @@ void GetVal(void *va, void *val, int size)
     for (i = 0; i < numPages; i++)
     {
         // Get the Physical Page.
-        void *physicalPage = Translate(pageDirectory, va + i);
+        void *physicalPage = Translate(pageDirectory, va + i * PGSIZE);
         //printf("\tPhysical page address %d: %x.\n", i, (int) physicalPage);
         
         // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
