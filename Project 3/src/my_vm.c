@@ -663,7 +663,7 @@ void *myalloc(unsigned int num_bytes)
     pthread_mutex_lock(&pageDirectoryLock);
     for (i = 0; i < numPages; i++)
     {
-        PageMap(pageDirectory, virtualPages + i, physicalPages[i]);
+        PageMap(pageDirectory, virtualPages + i * PGSIZE, physicalPages[i]);
     }
     pthread_mutex_unlock(&pageDirectoryLock);
 
@@ -716,7 +716,7 @@ void myfree(void *va, int size)
     pthread_mutex_lock(&physicalBitmapLock);
     for (i = 0; i < numPages; i++)
     {
-        void *physicalPage = Translate(pageDirectory, va + i);
+        void *physicalPage = Translate(pageDirectory, va + i * PGSIZE);
         physicalBitmap[((unsigned long) physicalPage - (unsigned long) physicalMemory) / PGSIZE] = 0;
         //printf("\t\tUpdated physical bitmap at index %lu.\n", ((unsigned long) physicalPage - (unsigned long) physicalMemory) / PGSIZE);
         // physical address = index of bit * pagesize + offset of start of physical memory.
@@ -737,7 +737,7 @@ void myfree(void *va, int size)
     for (i = 0; i < numPages; i++)
     {
         //printf("\t\tUpdating Page Directory at virtual address %x.\n", (int) (va + i));
-        PageMap(pageDirectory, va + i, NULL);
+        PageMap(pageDirectory, va + i * PGSIZE, NULL);
     }
     pthread_mutex_unlock(&pageDirectoryLock);
 
