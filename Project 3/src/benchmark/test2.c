@@ -81,7 +81,7 @@ int main() {
     thread = (pthread_t*)malloc(THREADS*sizeof(pthread_t));
     int i;
     for (i = 0; i < THREADS; ++i)
-		pthread_create(&thread[i], NULL, &parallel_func, NULL);
+		pthread_create(&thread[i], NULL, (void * (*)(void *)) parallel_func, NULL);
 
 	for (i = 0; i < THREADS; ++i)
 		pthread_join(thread[i], NULL);
