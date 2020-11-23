@@ -4,9 +4,9 @@
 #include <pthread.h>
 #include "../my_vm.h"
 
-#define SIZE 100
+#define SIZE 50
 //#define ALLOC 4*1024*1024
-#define ALLOC 20*4096
+#define ALLOC 10000
 #define THREADS 10
 
 pthread_t *thread;

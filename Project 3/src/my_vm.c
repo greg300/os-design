@@ -788,11 +788,12 @@ void myfree(void *va, int size)
     pthread_mutex_unlock(&pageDirectoryLock);
 
     // Remove the entries from the TLB, if they are in there.
+    pthread_mutex_lock(&tlbLock);
     for (i = 0; i < numPages; i++)
     {
         tlbClean(va + i * PGSIZE);
     }
-
+    pthread_mutex_unlock(&tlbLock);
     //printf("Myfree successful.\n");
 }
 
