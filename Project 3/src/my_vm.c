@@ -865,6 +865,7 @@ void MatMult(void *mat1, void *mat2, int size, void *answer)
     {
         for (j = 0; j < size; j++)
         {
+            z = 0;
             for (k = 0; k < size; k++)
             {
                 mat1Address = (unsigned int) mat1 + ((i * size * sizeof(int))) + (k * sizeof(int));
