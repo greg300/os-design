@@ -1,14 +1,19 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <pthread.h>
 #include "../my_vm.h"
 
 #define SIZE 5
-#define ALLOC 8192
+#define ALLOC 4*1024*1024
+#define THREADS 10
 
-int main() {
+pthread_t *thread;
 
-    printf("Allocating three arrays of 400 bytes\n");
+/* A CPU-bound task to do parallel array addition */
+void parallel_func(void* arg) {
+	
+	printf("Allocating three arrays of %d bytes\n", ALLOC);
     void *a = myalloc(ALLOC);
     int old_a = (int)a;
     void *b = myalloc(ALLOC);
@@ -68,7 +73,21 @@ int main() {
     else
         printf("free function does not work\n");
 
+	pthread_exit(NULL);
+}
+
+int main() {
+
+    thread = (pthread_t*)malloc(THREADS*sizeof(pthread_t));
+    int i;
+    for (i = 0; i < THREADS; ++i)
+		pthread_create(&thread[i], NULL, &parallel_func, NULL);
+
+	for (i = 0; i < THREADS; ++i)
+		pthread_join(thread[i], NULL);
+
     print_TLB_missrate();
+    free(thread);
 
     return 0;
 }
