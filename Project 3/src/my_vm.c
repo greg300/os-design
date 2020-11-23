@@ -531,7 +531,7 @@ void *get_next_avail_virt(int numPages)
         {
             foundPages++;
             startIndex = i;
-            for (j = 0; j < numVirtualPages && foundPages < numPages; j++)
+            for (j = i; j < numVirtualPages && foundPages < numPages; j++)
             {
                 if (virtualBitmap[j] == 0)
                 {
