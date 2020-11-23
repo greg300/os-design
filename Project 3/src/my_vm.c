@@ -380,7 +380,7 @@ void print_TLB_missrate()
 
     missRate = (double) numTLBMisses / numTLBAccesses;
     fprintf(stderr, "TLB miss rate %lf \n", missRate);
-    printf("%d entries in TLB.\n", numTLBEntries);
+    //printf("%d entries in TLB.\n", numTLBEntries);
 }
 
 

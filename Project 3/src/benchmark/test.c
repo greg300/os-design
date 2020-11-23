@@ -5,8 +5,8 @@
 #include <unistd.h>
 #include "../my_vm.h"
 
-#define SIZE 5
-#define ALLOC 100*4
+#define SIZE 50
+#define ALLOC 10000
 
 int main() {
 
