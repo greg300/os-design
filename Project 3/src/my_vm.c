@@ -1,6 +1,7 @@
 #include "my_vm.h"
 
 int isFirst = 0;  				        // For an atomic check as to whether myalloc() is being called for the first time.
+int isInitialized = 0;                  // Keeps other threads from using myalloc() until initialization is complete.
 int numVirtualPages;                    // The number of virtual pages needed (given by MAX_MEMSIZE / PGSIZE).
 int numPhysicalPages;                   // The number of physical pages needed (given by MEMSIZE / PGSIZE).
 int numPageBitsOuter;                   // The number of bits to index into the outer Page Directory.
@@ -312,6 +313,7 @@ void SetPhysicalMem()
     // Create the TLB.
     tlbCreate();
     pthread_mutex_unlock(&tlbLock);
+    isInitialized = 1;
 
     //printf("Initialization complete.\n");
 }
@@ -631,6 +633,8 @@ void *myalloc(unsigned int num_bytes)
     {
         SetPhysicalMem();
     }
+    // If initialization is not complete, wait.
+    while (!isInitialized) {}
 
     int i;
 
