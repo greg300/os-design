@@ -48,6 +48,10 @@ int main() {
             GetVal((void *)address_a, &y, sizeof(int));
             GetVal( (void *)address_b, &z, sizeof(int));
             printf("%d ", y);
+            if (y == 0)
+            {
+                printf("%x\n", (int) address_a);
+            }
         }
         printf("\n");
     }
