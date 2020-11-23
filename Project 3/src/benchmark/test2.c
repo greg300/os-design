@@ -6,7 +6,7 @@
 
 #define SIZE 5
 //#define ALLOC 4*1024*1024
-#define ALLOC 8192
+#define ALLOC 20*4096
 #define THREADS 10
 
 pthread_t *thread;
