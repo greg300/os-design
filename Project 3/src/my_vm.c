@@ -560,22 +560,10 @@ void *get_next_avail_virt(int numPages)
         return NULL;
     }
 
-    // Mark chosen pages as used in the Virtual Bitmap.
-    for (i = 0; i < foundPages; i++)
-    {
-        virtualBitmap[startIndex + i] = 1;
-    }
-
     // Return the virtual address of the first page.
     // virtual address = index of bit * PGSIZE.
     //printf("Returning virtual address %x.\n", (int) (startIndex * PGSIZE));
     return (void *) (startIndex * PGSIZE);
-
-    // Reserve 0x0000 for NULL
-    // 0x1000 – start
-
-    // 1 * 4kb = 0x1000
-    // 6 * 4kb = 0x6000
 }
 
 
@@ -787,7 +775,7 @@ void PutVal(void *va, void *val, int size)
         // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
         if (physicalPage == NULL)
         {
-            //printf("\tReturning: no entry in Page Directory.\n");
+            printf("\tReturning: no entry in Page Directory for va %x.\n", (int) va);
             return;
         }
 
@@ -831,7 +819,7 @@ void GetVal(void *va, void *val, int size)
         // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
         if (physicalPage == NULL)
         {
-            //printf("\tReturning: no entry in Page Directory.\n");
+            printf("\tReturning: no entry in Page Directory for va %x.\n", (int) va);
             return;
         }
 
