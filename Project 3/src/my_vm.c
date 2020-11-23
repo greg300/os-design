@@ -227,6 +227,53 @@ void tlbEvict()
 
 
 /*
+[HELPER] After free, make sure there are no occurrences of va in the TLB.
+*/
+void tlbClean(void *va)
+{
+    node *current = tlbStore -> front; 
+    node *prev = NULL;
+
+    // If the front holds the va to be deleted, change front and free old head.
+    if (current != NULL && current -> entry -> va == va)
+    {
+        tlbStore -> front = current -> next;
+
+        free(current -> entry);
+        free(current);
+
+        // If front becomes NULL (i.e., queue is empty), then fix rear to be NULL as well.
+        if (tlbStore -> front == NULL)
+        {
+            tlbStore -> rear = NULL;
+        }
+        numTLBEntries--;
+        return;
+    }
+
+    // Search for the va to be deleted and keep track of previous node.
+    while (current != NULL && current -> entry -> va != va)
+    {
+        prev = current;
+        current = current -> next;
+    }
+
+    // If va was not present, simply return.
+    if (current == NULL)
+    {
+        return;
+    }
+
+    // Otherwise, unlink the found node and free it.
+    prev -> next = current -> next;
+
+    free(current -> entry);
+    free(current);
+    numTLBEntries--;
+}
+
+
+/*
 Function responsible for allocating and setting your physical memory.
 */
 void SetPhysicalMem()
@@ -418,9 +465,9 @@ pte_t *Translate(pde_t *pgdir, void *va)
     //printf("\tOffset: %d\n", (int) offset);
 
     // Index into the Page Directory (1st level) to find the corresponding Page Table.
-    pthread_mutex_lock(&pageDirectoryLock);
+    //pthread_mutex_lock(&pageDirectoryLock);
     pde_t pageTable = indexPageDirectory(pgdir, outerIndex);
-    pthread_mutex_unlock(&pageDirectoryLock);
+    //pthread_mutex_unlock(&pageDirectoryLock);
 
     // If the given entry in the Page Directory does not yet exist, translation fails.
     if (pageTable == NULL)
@@ -430,9 +477,9 @@ pte_t *Translate(pde_t *pgdir, void *va)
     }
 
     // Index into the found Page Table.
-    pthread_mutex_lock(&pageDirectoryLock);
+    //pthread_mutex_lock(&pageDirectoryLock);
     pte_t page = indexPageTable(pageTable, innerIndex);
-    pthread_mutex_unlock(&pageDirectoryLock);
+    //pthread_mutex_unlock(&pageDirectoryLock);
 
     // If the given entry in the Page Table does not yet exist, translation fails.
     if (page == NULL)
@@ -496,7 +543,6 @@ int PageMap(pde_t *pgdir, void *va, void *pa)
 
     // Set the mapping at the indexed virtual address to be the corresponding physical address.
     pageTable[innerIndex] = pa;
-    page = pageTable[innerIndex];
 
     // Add the mapping to the TLB.
     pthread_mutex_lock(&tlbLock);
@@ -740,6 +786,12 @@ void myfree(void *va, int size)
         PageMap(pageDirectory, va + i * PGSIZE, NULL);
     }
     pthread_mutex_unlock(&pageDirectoryLock);
+
+    // Remove the entries from the TLB, if they are in there.
+    for (i = 0; i < numPages; i++)
+    {
+        tlbClean(va + i * PGSIZE);
+    }
 
     //printf("Myfree successful.\n");
 }
