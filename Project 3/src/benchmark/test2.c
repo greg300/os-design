@@ -6,7 +6,7 @@
 
 #define SIZE 5
 //#define ALLOC 4*1024*1024
-#define ALLOC 400
+#define ALLOC 8192
 #define THREADS 10
 
 pthread_t *thread;
@@ -69,6 +69,7 @@ void parallel_func(void* arg) {
 
     printf("Checking if allocations were freed!\n");
     a = myalloc(ALLOC);
+    printf("Old a: %x, new a: %x\n", old_a, (int) a);
     if ((int)a == old_a)
         printf("free function works\n");
     else
