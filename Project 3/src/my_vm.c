@@ -874,7 +874,7 @@ void MatMult(void *mat1, void *mat2, int size, void *answer)
                 z += x * y;
             }
             matResultAddress = (unsigned int) answer + ((i * size * sizeof(int))) + (j * sizeof(int));
-            PutVal((void *) matResultAddress, &(z), sizeof(int));
+            PutVal((void *) matResultAddress, &z, sizeof(int));
         }
     }
 }
