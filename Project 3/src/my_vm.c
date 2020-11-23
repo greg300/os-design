@@ -400,7 +400,7 @@ pte_t *Translate(pde_t *pgdir, void *va)
     // If entry is in the TLB, simply return it.
     if (pa != NULL)
     {
-        printf("Found mapping for address %x in TLB.\n", (int) va);
+        //printf("Found mapping for address %x in TLB.\n", (int) va);
         return pa;
     }
 
