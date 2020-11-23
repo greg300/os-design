@@ -394,12 +394,12 @@ pte_t *Translate(pde_t *pgdir, void *va)
 
     // Before indexing into the Page Directory, first see whether the entry exists in the TLB.
     pthread_mutex_lock(&tlbLock);
-    void *pa = check_in_tlb(va);
+    pte_t *pa = check_TLB(va);
     pthread_mutex_unlock(&tlbLock);
     // If entry is in the TLB, simply return it.
     if (pa != NULL)
     {
-        return (pte_t *) pa;
+        return pa;
     }
 
     //printBits((u_int32_t) va);
