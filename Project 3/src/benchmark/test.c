@@ -4,14 +4,21 @@
 #include "../my_vm.h"
 
 #define SIZE 5
+#define ALLOC 100*4
 
 int main() {
 
+	// Define the timeval structs to store the start and end times, as well as the difference between them.
+	struct timeval start, end, diff;
+
+	// Start timing.
+    gettimeofday(&start, NULL);
+    
     printf("Allocating three arrays of 400 bytes\n");
-    void *a = myalloc(100*4);
+    void *a = myalloc(ALLOC);
     int old_a = (int)a;
-    void *b = myalloc(100*4);
-    void *c = myalloc(100*4);
+    void *b = myalloc(ALLOC);
+    void *c = myalloc(ALLOC);
     int x = 1;
     int y, z;
     int i =0, j=0;
@@ -56,16 +63,28 @@ int main() {
         printf("\n");
     }
     printf("Freeing the allocations!\n");
-    myfree(a, 100*4);
-    myfree(b, 100*4);
-    myfree(c, 100*4);
+    myfree(a, ALLOC);
+    myfree(b, ALLOC);
+    myfree(c, ALLOC);
 
     printf("Checking if allocations were freed!\n");
-    a = myalloc(100*4);
+    a = myalloc(ALLOC);
     if ((int)a == old_a)
         printf("free function works\n");
     else
         printf("free function does not work\n");
+
+    // Stop timing.
+	gettimeofday(&end, NULL);
+
+	// Calculate the difference.
+    timersub(&end, &start, &diff);
+
+	// Determine the results.
+	double total = diff.tv_sec * 1000000.0 + diff.tv_usec;
+
+	// Output the results.
+	printf("Total Elapsed Time: %8.5f microseconds\n", total);
 
     print_TLB_missrate();
 

@@ -498,15 +498,12 @@ int PageMap(pde_t *pgdir, void *va, void *pa)
     pageTable[innerIndex] = pa;
     page = pageTable[innerIndex];
 
-    //printf("Mapped physical address %x to PDE %d, PTE %d.\n", (int) pa, (int) outerIndex, (int) innerIndex);
+    // Add the mapping to the TLB.
+    pthread_mutex_lock(&tlbLock);
+    add_TLB(va, pa);
+    pthread_mutex_unlock(&tlbLock);
 
-    // If the given entry in the Page Table does not yet exist, create an entry.
-    // if (page == NULL)
-    // {
-    //     // Set the mapping at the indexed virtual address to be the corresponding physical address.
-    //     pageTable[innerIndex] = pa;
-    //     page = pageTable[innerIndex];
-    // }
+    //printf("Mapped physical address %x to PDE %d, PTE %d.\n", (int) pa, (int) outerIndex, (int) innerIndex);
 
     return 1;
 }
@@ -541,7 +538,6 @@ void *get_next_avail_virt(int numPages)
                 {
                     break;
                 }
-                
             }
         }
         // If the needed number of free contiguous pages have been found, stop looking.
