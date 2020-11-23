@@ -648,7 +648,7 @@ void *myalloc(unsigned int num_bytes)
     // If not enough physical pages are available, return NULL for failure.
     if (foundPhysicalPages < numPages)
     {
-        printf("\tReturning NULL: not enough physical pages. %d needed, %d found.\n", foundPhysicalPages, numPages);
+        //printf("\tReturning NULL: not enough physical pages. %d needed, %d found.\n", foundPhysicalPages, numPages);
         pthread_mutex_unlock(&physicalBitmapLock);
         free(physicalPages);
         free(physicalPageIndices);
@@ -662,7 +662,7 @@ void *myalloc(unsigned int num_bytes)
     // If not enough virtual pages are available, return NULL for failure.
     if (virtualPages == NULL)
     {
-        printf("\tReturning NULL: not enough contiguous virtual pages.\n");
+        //printf("\tReturning NULL: not enough contiguous virtual pages.\n");
         pthread_mutex_unlock(&physicalBitmapLock);
         pthread_mutex_unlock(&virtualBitmapLock);
         free(physicalPages);
@@ -700,7 +700,7 @@ void *myalloc(unsigned int num_bytes)
     free(physicalPages);
     free(physicalPageIndices);
 
-    printf("Myalloc successful. Returning virtual address %x.\n", (int) virtualPages);
+    //printf("Myalloc successful. Returning virtual address %x.\n", (int) virtualPages);
 
     return virtualPages;
 }

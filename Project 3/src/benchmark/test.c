@@ -6,7 +6,7 @@
 #include "../my_vm.h"
 
 #define SIZE 50
-#define ALLOC 10000
+#define ALLOC 100000
 
 int main() {
 
@@ -16,7 +16,7 @@ int main() {
 	// Start timing.
     gettimeofday(&start, NULL);
     
-    printf("Allocating three arrays of 400 bytes\n");
+    printf("Allocating three arrays of %d bytes\n", ALLOC);
     void *a = myalloc(ALLOC);
     int old_a = (int)a;
     void *b = myalloc(ALLOC);
