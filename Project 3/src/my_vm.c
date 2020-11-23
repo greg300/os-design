@@ -692,7 +692,7 @@ void *myalloc(unsigned int num_bytes)
     //printf("\tUpdating the virtual bitmap.\n");
     for (i = 0; i < numPages; i++)
     {
-        virtualBitmap[(unsigned int) virtualPages / PGSIZE] = 1;
+        virtualBitmap[(unsigned int) (virtualPages + i) / PGSIZE] = 1;
         //printf("\t\tUpdated virtual bitmap at index %u.\n", (unsigned int) virtualPages / PGSIZE);
     }
     pthread_mutex_unlock(&virtualBitmapLock);
@@ -739,7 +739,7 @@ void myfree(void *va, int size)
     pthread_mutex_lock(&virtualBitmapLock);
     for (i = 0; i < numPages; i++)
     {
-        virtualBitmap[(unsigned int) va / PGSIZE] = 0;
+        virtualBitmap[(unsigned int) (va + i) / PGSIZE] = 0;
         //printf("\t\tUpdated virtual bitmap at index %u.\n", (unsigned int) va / PGSIZE);
     }
     pthread_mutex_unlock(&virtualBitmapLock);
