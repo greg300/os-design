@@ -16,8 +16,17 @@ pthread_mutex_t pageDirectoryLock;      // Lock for the Page Directory.
 pthread_mutex_t physicalMemoryLock;     // Lock for Physical Memory.
 pthread_mutex_t virtualBitmapLock;      // Lock for the Virtual Bitmap.
 pthread_mutex_t physicalBitmapLock;     // Lock for the Physical Bitmap.
+pthread_mutex_t tlbLock;                // Lock for the TLB.
+tlb *tlbStore;                          // The TLB.
+int numTLBEntries;                      // The number of entries currently living in the TLB.
+int numTLBAccesses;                     // The number of times the TLB was accessed (hit or miss).
+int numTLBMisses;                       // The number of times the TLB has had a miss.
+int numTLBHits;                         // The number of times the TLB has had a hit.
 
 
+/*
+[HELPER] Print the individual bits of a 32-bit address.
+*/
 void printBits(uint32_t x)
 {
     unsigned int size = sizeof(uint32_t);
@@ -32,6 +41,9 @@ void printBits(uint32_t x)
 }
 
 
+/*
+[HELPER] Create a 32-bit mask for getting the bits from start to end.
+*/
 uint32_t createBitMask(int start, int end)
 {
     uint32_t result = 0;
@@ -46,6 +58,9 @@ uint32_t createBitMask(int start, int end)
 }
 
 
+/*
+[HELPER] Get the bits from the given addr, from start to end.
+*/
 uint32_t getBits(void *addr, int start, int end)
 {
     uint32_t result;
@@ -59,6 +74,9 @@ uint32_t getBits(void *addr, int start, int end)
 }
 
 
+/*
+[HELPER] Extract the bits of the outer index (first half of VPN) from the address.
+*/
 uint32_t extractOuterBits(void *addr)
 {
     int start = 1;
@@ -67,6 +85,9 @@ uint32_t extractOuterBits(void *addr)
 }
 
 
+/*
+[HELPER] Extract the bits of the inner index (second half of VPN) from the address.
+*/
 uint32_t extractInnerBits(void *addr)
 {
     int start = numPageBitsOuter + 1;
@@ -75,6 +96,9 @@ uint32_t extractInnerBits(void *addr)
 }
 
 
+/*
+[HELPER] Extract the bits of the offset from the address.
+*/
 uint32_t extractOffsetBits(void *addr)
 {
     int start = numPageBitsOuter + numPageBitsInner + 1;
@@ -83,15 +107,121 @@ uint32_t extractOffsetBits(void *addr)
 }
 
 
+/*
+[HELPER] Index into the Page Directory with the outer index bits.
+*/
 pde_t indexPageDirectory(pde_t *pgdir, uint32_t outerIndex)
 {
     return pgdir[outerIndex];
 }
 
 
+/*
+[HELPER] Index into an individual Page Table with the inner index bits.
+*/
 pte_t indexPageTable(pde_t pageTable, uint32_t innerIndex)
 {
     return pageTable[innerIndex];
+}
+
+
+/*
+[HELPER] Create a new Linked List node.
+*/
+node *newNode(void *va, void *pa)
+{
+    // Allocate space for a TLB entry.
+    tlbEntry *entry = (tlbEntry *) malloc(sizeof(tlbEntry));
+    // Populate the TLB entry.
+    entry -> va = va;
+    entry -> pa = pa;
+
+	// Allocate space for a TLB node.
+	node * temp = (node *) malloc(sizeof(node));
+	// Set the TCB of the node to the given TCB.
+	temp -> entry = entry;
+	// Initialize the next node to NULL.
+	temp -> next = NULL;
+	// Return the created node.
+	return temp;
+}
+
+
+/*
+[HELPER] Initialize a new, empty TLB as global variable tlbStore.
+*/
+void tlbCreate()
+{
+	// Allocate space for a TLB.
+	tlbStore = (tlb *) malloc(sizeof(tlb));
+	// Initialize the front and rear to NULL.
+	tlbStore -> front = NULL;
+	tlbStore -> rear = NULL;
+
+    // Initialize the number of entries in the TLB and the TLB accesses, misses and hits to 0.
+    numTLBEntries = 0;
+    numTLBAccesses = 0;
+    numTLBMisses = 0;
+    numTLBHits = 0;
+}
+
+
+/*
+[HELPER] Add an entry to the TLB.
+*/
+void tlbAdd(void *va, void *pa)
+{
+    // First, see if an eviction is necessary.
+    if (numTLBEntries == TLB_SIZE)
+    {
+        tlbEvict();
+    }
+
+	// Create a Linked List node.
+	node *temp = newNode(va, pa);
+
+	// If this is the first insertion (TLB is empty), set new node to both front and rear.
+	if (tlbStore -> rear == NULL)
+	{
+		tlbStore -> front = temp;
+		tlbStore -> rear = temp;
+		return;
+	}
+
+	// Otherwise, append new node to end of TLB and update rear.
+	tlbStore -> rear -> next = temp;
+	tlbStore -> rear = temp;
+
+    numTLBEntries++;
+}
+
+
+/*
+[HELPER] Evict an entry from the TLB (FIFO policy).
+*/
+void tlbEvict()
+{
+	// If TLB is empty, return nothing.
+	if (tlbStore -> front == NULL)
+	{
+		return;
+	}
+
+	// Store old front, and move current front one node ahead.
+	node * temp = tlbStore -> front;
+	tlbStore -> front = tlbStore -> front -> next;
+	
+	// If front becomes NULL (i.e., queue is empty), then fix rear to be NULL as well.
+	if (tlbStore -> front == NULL)
+	{
+		tlbStore -> rear = NULL;
+	}
+
+	// Free the allocated node.
+    free(temp -> entry);
+	free(temp);
+
+    numTLBEntries--;
 }
 
 
@@ -113,12 +243,14 @@ void SetPhysicalMem()
     pthread_mutex_init(&physicalBitmapLock, NULL);
     pthread_mutex_init(&virtualBitmapLock, NULL);
     pthread_mutex_init(&pageDirectoryLock, NULL);
+    pthread_mutex_init(&tlbLock, NULL);
 
     // Lock all mutexes until their part of the initialization process is complete.
     pthread_mutex_lock(&physicalMemoryLock);
     pthread_mutex_lock(&physicalBitmapLock);
     pthread_mutex_lock(&virtualBitmapLock);
     pthread_mutex_lock(&pageDirectoryLock);
+    pthread_mutex_lock(&tlbLock);
 
     // 1. malloc MEMSIZE memory.
     physicalMemory = malloc(MEMSIZE);
@@ -177,6 +309,10 @@ void SetPhysicalMem()
         pageDirectory[i] = NULL;
     pthread_mutex_unlock(&pageDirectoryLock);
 
+    // Create the TLB.
+    tlbCreate();
+    pthread_mutex_unlock(&tlbLock);
+
     //printf("Initialization complete.\n");
 }
 
@@ -188,8 +324,8 @@ void SetPhysicalMem()
 int add_TLB(void *va, void *pa)
 {
     /* Part 2 HINT: Add a virtual to physical page translation to the TLB. */
-
-    return -1;
+    tlbAdd(va, pa);
+    return 1;
 }
 
 
@@ -198,11 +334,36 @@ int add_TLB(void *va, void *pa)
  * Returns the physical page address.
  * Feel free to extend this function and change the return type.
  */
-pte_t * check_TLB(void *va)
+pte_t *check_TLB(void *va)
 {
     /* Part 2: TLB lookup code here. */
+    numTLBAccesses++;
+    // Start at the front of the TLB.
+	node *current = tlbStore -> front;
 
-    return NULL;
+	// If TLB is empty, return NULL.
+	if (current == NULL)
+	{
+		// Not found.
+        numTLBMisses++;
+		return NULL;
+	}
+
+	// Traverse the TLB for the node with the given virtual address va.
+	while (current != NULL)
+	{
+		if (current -> entry -> va == va)
+		{
+			// Found.
+            numTLBHits++;
+			return current -> entry -> pa;
+		}
+		current = current -> next;
+	}
+
+	// Not found.
+    numTLBMisses++;
+	return NULL;
 }
 
 
@@ -212,14 +373,11 @@ pte_t * check_TLB(void *va)
  */
 void print_TLB_missrate()
 {
-    double miss_rate = 0;
-
     /* Part 2: Code here to calculate and print the TLB miss rate. */
+    double missRate = 0;
 
-
-
-
-    fprintf(stderr, "TLB miss rate %lf \n", miss_rate);
+    missRate = (double) numTLBMisses / numTLBAccesses;
+    fprintf(stderr, "TLB miss rate %lf \n", missRate);
 }
 
 
@@ -233,6 +391,16 @@ pte_t *Translate(pde_t *pgdir, void *va)
     2nd-level-page table index using the virtual address. Using the page
     directory index and page table index get the physical address. */
     //printf("Translating virtual address: %x\n", (int) va);
+
+    // Before indexing into the Page Directory, first see whether the entry exists in the TLB.
+    pthread_mutex_lock(&tlbLock);
+    void *pa = check_in_tlb(va);
+    pthread_mutex_unlock(&tlbLock);
+    // If entry is in the TLB, simply return it.
+    if (pa != NULL)
+    {
+        return (pte_t *) pa;
+    }
 
     //printBits((u_int32_t) va);
     //printf("-----------------------------\n");
@@ -271,6 +439,12 @@ pte_t *Translate(pde_t *pgdir, void *va)
 
     // physical address = address of physical page + offset.
     pte_t *physicalAddress = (pte_t *) page + offset;
+
+    // Since this mapping was not in the TLB, add it to the TLB.
+    pthread_mutex_lock(&tlbLock);
+    add_TLB(va, (void *) physicalAddress);
+    pthread_mutex_unlock(&tlbLock);
+
     //printf("Translated virtual address %x to physical address %x.\n", (int) va, (int) physicalAddress);
 
     return physicalAddress;

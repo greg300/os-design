@@ -12,7 +12,7 @@ int main() {
     int old_a = (int)a;
     void *b = myalloc(100*4);
     void *c = myalloc(100*4);
-    int x = 2;
+    int x = 1;
     int y, z;
     int i =0, j=0;
     int address_a = 0, address_b = 0;
