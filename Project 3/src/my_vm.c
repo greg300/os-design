@@ -858,20 +858,23 @@ void MatMult(void *mat1, void *mat2, int size, void *answer)
     getting the values from two matrices, you will perform multiplication and
     store the result to the "answer array". */
 
-    int i, j;
+    int i, j, k;
     int mat1Address = 0, mat2Address = 0, matResultAddress = 0;
     int x, y, z;
     for (i = 0; i < size; i++)
     {
         for (j = 0; j < size; j++)
         {
-            mat1Address = (unsigned int) mat1 + ((i * size * sizeof(int))) + (j * sizeof(int));
-            mat2Address = (unsigned int) mat2 + ((i * size * sizeof(int))) + (j * sizeof(int));
-            GetVal((void *) mat1Address, &x, sizeof(int));
-            GetVal((void *) mat2Address, &y, sizeof(int));
-            z += x * y;
+            for (k = 0; k < size; k++)
+            {
+                mat1Address = (unsigned int) mat1 + ((i * size * sizeof(int))) + (k * sizeof(int));
+                mat2Address = (unsigned int) mat2 + ((k * size * sizeof(int))) + (j * sizeof(int));
+                GetVal((void *) mat1Address, &x, sizeof(int));
+                GetVal((void *) mat2Address, &y, sizeof(int));
+                z += x * y;
+            }
+            matResultAddress = (unsigned int) answer + ((i * size * sizeof(int))) + (j * sizeof(int));
+            PutVal((void *) matResultAddress, &(z), sizeof(int));
         }
-        matResultAddress = (unsigned int) answer + ((i * size * sizeof(int))) + (j * sizeof(int));
-        PutVal((void *) matResultAddress, &(z), sizeof(int));
     }
 }
