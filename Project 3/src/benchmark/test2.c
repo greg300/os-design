@@ -69,7 +69,7 @@ void parallel_func(void* arg) {
 
     printf("Checking if allocations were freed!\n");
     a = myalloc(ALLOC);
-    printf("Old a: %x, new a: %x\n", old_a, (int) a);
+    //printf("Old a: %x, new a: %x\n", old_a, (int) a);
     if ((int)a == old_a)
         printf("free function works\n");
     else
