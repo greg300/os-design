@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include "../my_vm.h"
 
-#define SIZE 5
+#define SIZE 100
 //#define ALLOC 4*1024*1024
 #define ALLOC 20*4096
 #define THREADS 10
