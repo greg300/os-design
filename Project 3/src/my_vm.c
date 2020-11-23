@@ -378,6 +378,7 @@ void print_TLB_missrate()
 
     missRate = (double) numTLBMisses / numTLBAccesses;
     fprintf(stderr, "TLB miss rate %lf \n", missRate);
+    printf("%d entries in TLB.\n", numTLBEntries);
 }
 
 
@@ -399,6 +400,7 @@ pte_t *Translate(pde_t *pgdir, void *va)
     // If entry is in the TLB, simply return it.
     if (pa != NULL)
     {
+        printf("Found mapping for address %x in TLB.\n", (int) va);
         return pa;
     }
 
@@ -865,11 +867,11 @@ void MatMult(void *mat1, void *mat2, int size, void *answer)
         {
             mat1Address = (unsigned int) mat1 + ((i * size * sizeof(int))) + (j * sizeof(int));
             mat2Address = (unsigned int) mat2 + ((i * size * sizeof(int))) + (j * sizeof(int));
-            matResultAddress = (unsigned int) answer + ((i * size * sizeof(int))) + (j * sizeof(int));
             GetVal((void *) mat1Address, &x, sizeof(int));
             GetVal((void *) mat2Address, &y, sizeof(int));
-            z = x * y;
-            PutVal((void *) matResultAddress, &(z), sizeof(int));
+            z += x * y;
         }
+        matResultAddress = (unsigned int) answer + ((i * size * sizeof(int))) + (j * sizeof(int));
+        PutVal((void *) matResultAddress, &(z), sizeof(int));
     }
 }
