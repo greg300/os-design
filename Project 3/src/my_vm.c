@@ -834,7 +834,7 @@ void PutVal(void *va, void *val, int size)
 
         // Write the data.
         //printf("\tAttemping to write data from source address %x to destination %x.\n", (int) (val + i * PGSIZE), (int) physicalPage);
-        bytesToWrite = bytesRemaining > PGSIZE ? PGSIZE : size % PGSIZE;
+        bytesToWrite = bytesRemaining >= PGSIZE ? PGSIZE : size % PGSIZE;
         //printf("Blocking in Putval for address %x.\n", (int) val + i * PGSIZE);
         pthread_mutex_lock(&physicalMemoryLock);
         memcpy(physicalPage, (void *) ((unsigned long) val + i * PGSIZE), bytesToWrite);
@@ -879,7 +879,7 @@ void GetVal(void *va, void *val, int size)
         }
 
         // Write the data.
-        bytesToWrite = bytesRemaining > PGSIZE ? PGSIZE : size % PGSIZE;
+        bytesToWrite = bytesRemaining >= PGSIZE ? PGSIZE : size % PGSIZE;
         //printf("Blocking in Getval for address %x.\n", (int) val + i * PGSIZE);
         pthread_mutex_lock(&physicalMemoryLock);
         memcpy((void *) ((unsigned long) val + i * PGSIZE), physicalPage, bytesToWrite);
@@ -920,6 +920,7 @@ void MatMult(void *mat1, void *mat2, int size, void *answer)
                 z += x * y;
             }
             matResultAddress = (unsigned int) answer + ((i * size * sizeof(int))) + (j * sizeof(int));
+            printf("Writing %d\n", z);
             PutVal((void *) matResultAddress, &z, sizeof(int));
         }
     }
