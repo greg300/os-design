@@ -709,7 +709,7 @@ void *myalloc(unsigned int num_bytes)
     pthread_mutex_lock(&pageDirectoryLock);
     for (i = 0; i < numPages; i++)
     {
-        PageMap(pageDirectory, (void *) ((unsigned long) (virtualPages + i * PGSIZE)), physicalPages[i]);
+        PageMap(pageDirectory, virtualPages + i * PGSIZE, physicalPages[i]);
     }
     pthread_mutex_unlock(&pageDirectoryLock);
 
@@ -762,7 +762,7 @@ void myfree(void *va, int size)
     pthread_mutex_lock(&physicalBitmapLock);
     for (i = 0; i < numPages; i++)
     {
-        void *physicalPage = Translate(pageDirectory, (void *) ((unsigned long) (va + i * PGSIZE)));
+        void *physicalPage = Translate(pageDirectory, va + i * PGSIZE);
         physicalBitmap[((unsigned long) physicalPage - (unsigned long) physicalMemory) / PGSIZE] = 0;
         //printf("\t\tUpdated physical bitmap at index %lu.\n", ((unsigned long) physicalPage - (unsigned long) physicalMemory) / PGSIZE);
         // physical address = index of bit * pagesize + offset of start of physical memory.
@@ -783,7 +783,7 @@ void myfree(void *va, int size)
     for (i = 0; i < numPages; i++)
     {
         //printf("\t\tUpdating Page Directory at virtual address %x.\n", (int) (va + i));
-        PageMap(pageDirectory, (void *) ((unsigned long) (va + i * PGSIZE)), NULL);
+        PageMap(pageDirectory, va + i * PGSIZE, NULL);
     }
     pthread_mutex_unlock(&pageDirectoryLock);
 
@@ -791,7 +791,7 @@ void myfree(void *va, int size)
     pthread_mutex_lock(&tlbLock);
     for (i = 0; i < numPages; i++)
     {
-        tlbClean((void *) ((unsigned long) (va + i * PGSIZE)));
+        tlbClean(va + i * PGSIZE);
     }
     pthread_mutex_unlock(&tlbLock);
     //printf("Myfree successful.\n");
@@ -822,7 +822,7 @@ void PutVal(void *va, void *val, int size)
     for (i = 0; i < numPages; i++)
     {
         // Get the Physical Page.
-        void *physicalPage = Translate(pageDirectory, (void *) ((unsigned long) (va + i * PGSIZE)));
+        void *physicalPage = Translate(pageDirectory, va + i * PGSIZE);
         //printf("\tPhysical page address %d: %x.\n", i, (int) physicalPage);
         
         // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
@@ -837,7 +837,7 @@ void PutVal(void *va, void *val, int size)
         bytesToWrite = bytesRemaining > PGSIZE ? PGSIZE : size % PGSIZE;
         //printf("Blocking in Putval for address %x.\n", (int) val + i * PGSIZE);
         pthread_mutex_lock(&physicalMemoryLock);
-        memcpy(physicalPage, (void *) ((unsigned long) (va + i * PGSIZE)), bytesToWrite);
+        memcpy(physicalPage, val + i * PGSIZE, bytesToWrite);
         pthread_mutex_unlock(&physicalMemoryLock);
         //printf("Unblocking in Putval for address %x.\n", (int) val + i * PGSIZE);
         bytesRemaining -= bytesToWrite;
@@ -868,7 +868,7 @@ void GetVal(void *va, void *val, int size)
     for (i = 0; i < numPages; i++)
     {
         // Get the Physical Page.
-        void *physicalPage = Translate(pageDirectory, (void *) ((unsigned long) (va + i * PGSIZE)));
+        void *physicalPage = Translate(pageDirectory, va + i * PGSIZE);
         //printf("\tPhysical page address %d: %x.\n", i, (int) physicalPage);
         
         // If there is no entry in the Page Directory for this virtual address, it has not been allocated; return.
@@ -882,7 +882,7 @@ void GetVal(void *va, void *val, int size)
         bytesToWrite = bytesRemaining > PGSIZE ? PGSIZE : size % PGSIZE;
         //printf("Blocking in Getval for address %x.\n", (int) val + i * PGSIZE);
         pthread_mutex_lock(&physicalMemoryLock);
-        memcpy((void *) ((unsigned long) (va + i * PGSIZE)), physicalPage, bytesToWrite);
+        memcpy(val + i * PGSIZE, physicalPage, bytesToWrite);
         pthread_mutex_unlock(&physicalMemoryLock);
         //printf("Unblocking in Getval for address %x.\n", (int) val + i * PGSIZE);
         bytesRemaining -= bytesToWrite;
