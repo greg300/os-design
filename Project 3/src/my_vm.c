@@ -922,6 +922,8 @@ void MatMult(void *mat1, void *mat2, int size, void *answer)
             matResultAddress = (unsigned int) answer + ((i * size * sizeof(int))) + (j * sizeof(int));
             printf("Writing %d\n", z);
             PutVal((void *) matResultAddress, &z, sizeof(int));
+            GetVal((void *) matResultAddress, &z, sizeof(int));
+            printf("Got back %d\n", z);
         }
     }
 }
