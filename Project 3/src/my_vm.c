@@ -917,13 +917,12 @@ void MatMult(void *mat1, void *mat2, int size, void *answer)
                 mat2Address = (unsigned int) mat2 + ((k * size * sizeof(int))) + (j * sizeof(int));
                 GetVal((void *) mat1Address, &x, sizeof(int));
                 GetVal((void *) mat2Address, &y, sizeof(int));
+                printf("Current z: %d, x = %d, y = %d\n", z, x, y);
                 z += x * y;
             }
             matResultAddress = (unsigned int) answer + ((i * size * sizeof(int))) + (j * sizeof(int));
             printf("Writing %d\n", z);
             PutVal((void *) matResultAddress, &z, sizeof(int));
-            GetVal((void *) matResultAddress, &z, sizeof(int));
-            printf("Got back %d\n", z);
         }
     }
 }
