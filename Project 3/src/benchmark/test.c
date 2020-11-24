@@ -6,7 +6,7 @@
 #include "../my_vm.h"
 
 #define SIZE 50
-#define ALLOC 10000
+#define ALLOC 20000
 
 int main() {
 
