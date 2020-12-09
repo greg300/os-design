@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/errno.h>
 
 #define BUFFSIZE 512
 #define ARGLIMIT 128
@@ -10,6 +11,7 @@
 int main()
 {
     int i;
+    int errorStatus;
     int commandArgCount = 0;
     int tokenCount = 0;
     pid_t pid;
@@ -30,6 +32,7 @@ int main()
     {
         commandArgCount = 0;
         tokenCount = 0;
+        errorStatus = 0;
         strcpy(input, "\0");
         strcpy(commandName, "\0");
         strcpy(commandPath, "/bin/");
@@ -81,37 +84,57 @@ int main()
             // Get the next token.
             token = strtok(NULL, " ");
         }
+
         // Prepare to launch this command.
+        // If the command is "cd", handle it separately.
         if (strcmp(commandName, "cd") == 0)
         {
+            if (commandArgCount != 2)
+            {
+                printf("Invalid use of 'cd': 1 argument expected, %d given.\n", commandArgCount);
+            }
+            else
+            {
+                errorStatus = chdir(commandArgs[1]);
+                if (errorStatus == -1)
+                {
+                    printf("Error while using 'cd': %s.\n", strerror(errno));
+                }
+                else
+                {
+                    getcwd(currentDirectory, BUFFSIZE);
+                }
+            }
+        }
+        else
+        {
+            strncat(commandPath, commandName, BUFFSIZE - strlen(commandPath));
+            for (i = commandArgCount; i < ARGLIMIT; i++)
+            {
+                commandArgs[i] = NULL;
+            }
+
+            pid = fork();
+            if (pid == 0)
+            {
+                //printf("Executing command %s.\n", commandPath);
+                execvp(commandPath, commandArgs);
+
+                // Pipe stdout to a fd for retrieval by parent.
+            }
             
-        }
-
-
-        strncat(commandPath, commandName, BUFFSIZE - strlen(commandPath));
-        for (i = commandArgCount; i < ARGLIMIT; i++)
-        {
-            commandArgs[i] = NULL;
-        }
-
-        pid = fork();
-        if (pid == 0)
-        {
-            //printf("Executing command %s.\n", commandPath);
-            execvp(commandPath, commandArgs);
-
-            // Pipe stdout to a fd for retrieval by parent.
+            waitpid(pid, NULL, 0);
+            //printf("Done\n");
         }
         
-        waitpid(pid, NULL, 0);
-        //printf("Done\n");
-
+        // Deallocate the command arguments.
         for (i = 0; i < commandArgCount; i++)
         {
             free(commandArgs[i]);
         }
     }
 
+    // Deallocate all memroy used.
     free(input);
     free(currentDirectory);
     free(commandName);
