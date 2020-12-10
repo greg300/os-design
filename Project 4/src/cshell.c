@@ -28,7 +28,7 @@ void resetMemory(int *commandArgCountPtr, int *errorStatusPtr, char *input, char
     *errorStatusPtr = 0;
     strcpy(input, "\0");
     strcpy(commandName, "\0");
-    strcpy(commandPath, "/bin/");
+    strcpy(commandPath, "\0");
     strcpy(commandOutputDestination, "\0");
 }
 
@@ -38,11 +38,10 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
     int i;
     int errorStatus;
     int outputFD;
-    int *pipeFD = allPipeFDs[pipesCount];
 
     if (commandType == CMD_PIPE)
     {
-        errorStatus = pipe(pipeFD);
+        errorStatus = pipe(allPipeFDs[pipesCount]);
         if (errorStatus == -1)
         {
             printf("Error while piping output: %s.\n", strerror(errno));
@@ -87,21 +86,18 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
         if (pid == 0)
         {
             // If the previous command had its output piped to this command, pipe it.
-            if (pipeLoaded == 1)
+            if (pipeLoaded == 1 && pipesCount > 0)
             {
-                printf("Unloading pipe!\n");
+                //printf("Unloading pipe with pipesCount = %d.\n", pipesCount);
                 // Close the write end of the pipe.
-                close(allPipeFDs[pipesCount][1]);
+                close(allPipeFDs[pipesCount - 1][1]);
 
                 // Pipe stdout from fd to the stdin of the new process.
                 // Send STDIN to the pipe.
-                dup2(allPipeFDs[pipesCount][0], STDIN_FILENO);
+                dup2(allPipeFDs[pipesCount - 1][0], STDIN_FILENO);
 
                 // No further action needed from this descriptor.
-                close(allPipeFDs[pipesCount][0]);
-
-                // Pipe is "unloaded".
-                pipeLoaded = 0;
+                close(allPipeFDs[pipesCount - 1][0]);
             }
 
             // If the output of this needs to be redirected (overwrite) (>), do so.
@@ -153,38 +149,47 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
             // If the output of this needs to be piped (|), do so.
             else if (commandType == CMD_PIPE)
             {
+                //printf("Loading pipe with pipesCount = %d.\n", pipesCount);
                 // Pipe stdout to a fd for retrieval by parent.
                 // Close the reading end for the child.
-                close(pipeFD[0]);
+                close(allPipeFDs[pipesCount][0]);
 
-                // Send STDOUT and STDERR to the pipe.
-                dup2(pipeFD[1], STDOUT_FILENO);
-                dup2(pipeFD[1], STDERR_FILENO);
+                // Send STDOUT to the pipe.
+                dup2(allPipeFDs[pipesCount][1], STDOUT_FILENO);
+                //dup2(pipeFD[1], STDERR_FILENO);
 
                 // No further action needed from this descriptor.
-                close(pipeFD[1]);
-
-                // Pipe is "loaded".
-                pipeLoaded = 1;
+                close(allPipeFDs[pipesCount][1]);
             }
 
-            fprintf(stdout, "Executing command %s.\n", commandPath);
+            //fprintf(stderr, "Executing command %s.\n", commandPath);
             // Execute the command.
             errorStatus = execvp(commandPath, commandArgs);
+
             if (errorStatus == -1)
             {
-                fprintf(stdout, "Error while executing command: %s.\n", strerror(errno));
+                // If the command is not found in the default /bin, try in /usr/bin.
+                // if (errno == EM)
+                // strncat(commandPath, commandName, BUFFSIZE - strlen(commandPath));
+                // errorStatus = execvp(commandPath, commandArgs);
+                if (errorStatus == -1)
+                {
+                    fprintf(stderr, "Error while executing command: %s.\n", strerror(errno));
+                }
+                exit(0);
             }
-            exit(0);
         }
         // If this is the parent process, wait for the child to finish executing its command.
         else if (pid > 0)
         {
             waitpid(pid, NULL, 0);
+
+            // Pipe is "unloaded", if it had been loaded.
+            pipeLoaded = 0;
         }
         else
         {
-            fprintf(stdout, "Error while creating process for command: %s.\n", strerror(errno));
+            fprintf(stderr, "Error while creating process for command: %s.\n", strerror(errno));
         }
         
         //printf("Done\n");
@@ -308,6 +313,9 @@ int main()
 
                 // Increment number of pipes for commands that follow in this input.
                 pipesCount++;
+
+                // Pipe is "loaded".
+                pipeLoaded = 1;
             }
             // Otherwise, token is a command or command argument.
             else
