@@ -10,38 +10,50 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-#define BUFFSIZE 4*1024
-#define ARGLIMIT 128
-#define PIPELIMIT 128
+#define BUFFSIZE 4*1024                 // The maximum number of bytes that one line of input can be.
+#define ARGLIMIT 128                    // The maximum number of arguments for a single command.
+#define PIPELIMIT 128                   // The maximum number of pipes for one line of input.
 
-#define CMD_NORMAL 1
-#define CMD_REDIRECT_OVERWRITE 2
-#define CMD_REDIRECT_APPEND 3
-#define CMD_PIPE 4
+#define CMD_NORMAL 1                    // Indicates a command to be executed without redirection or piping.
+#define CMD_REDIRECT_OVERWRITE 2        // Indicates a command to be executed with output redirection in overwrite mode.
+#define CMD_REDIRECT_APPEND 3           // Indicates a command to be executed with output redirection in append mode.
+#define CMD_PIPE 4                      // Indicates a command to be executed with piping (piping its output to a pipe).
 
-pid_t pid;
-int allPipeFDs[PIPELIMIT][2];
-int pipeLoaded = 0;
-int restartParse = 0;
+pid_t pid;                              // The currently-running child process/command.
+int allPipeFDs[PIPELIMIT][2];           // Array of all read/write file descriptors for all currently-existing pipes.
+int pipeLoaded = 0;                     // Determines whether the pipe is currently loaded (has output from previous command).
+int restartParse = 0;                   // Determines whether parsing ought to be restarted (following an interrupt signal).
 
+
+/*
+[SIGNAL HANDLER] Catches the interrupt signal (ctrl+c) and kills the currently-running child process, if any.
+*/
 void interruptSignalHandler(int sigNum)
 {
-	//printf("Caught signal %d.\n", sigNum);
     int errorStatus;
+
+    // Print a newline for cleanliness.
     printf("\n");
 
-    // If there is a process running (pid > 0), kill it.
+    // If there is a process running (pid != -1), kill it.
     if (pid > 0)
     {
+        // Send SIGKILL to the process.
         errorStatus = kill(pid, SIGKILL);
         if (errorStatus == -1)
         {
-            printf("Error while killing process %d: %s.\n", pid, strerror(errno));
+            fprintf(stderr, "Error while killing process %d: %s.\n", pid, strerror(errno));
         }
+
+        // Ensure that input parsing does not continue, so that any other commands in the input line are not executed.
         restartParse = 1;
     }
 }
 
+
+/*
+[HELPER] Resets some key variables to prepare for execution of next command.
+*/
 void resetMemory(int *commandArgCountPtr, int *errorStatusPtr, char *input, char *commandName, char *commandPath,
                  char *commandOutputDestination)
 {
@@ -53,6 +65,25 @@ void resetMemory(int *commandArgCountPtr, int *errorStatusPtr, char *input, char
     strcpy(commandOutputDestination, "\0");
 }
 
+
+/*
+[HELPER] Deallocates any allocated command arguments.
+*/
+void deallocateCommandArgs(char **commandArgs, int commandArgCount)
+{
+    int i;
+
+    // Deallocate the command arguments.
+    for (i = 0; i < commandArgCount; i++)
+    {
+        free(commandArgs[i]);
+    }
+}
+
+
+/*
+[HELPER] Executes the command given by commandName.
+*/
 void executeCommand(char *currentDirectory, char *commandName, char *commandPath, char **commandArgs,
                     int commandArgCount, int commandType, char *commandOutputDestination, int pipesCount)
 {
@@ -60,24 +91,28 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
     int errorStatus;
     int outputFD;
 
+    // If this command needs to have its output piped to the next command, create the pipe as the parent.
     if (commandType == CMD_PIPE)
     {
+        // Create a pipe, and save it to the array of pipes.
         errorStatus = pipe(allPipeFDs[pipesCount]);
         if (errorStatus == -1)
         {
-            printf("Error while piping output: %s.\n", strerror(errno));
+            fprintf(stderr, "Error while piping output: %s.\n", strerror(errno));
+            deallocateCommandArgs(commandArgs, commandArgCount);
             return;
         }
     }
 
     // Prepare to launch the given command.
+
     // If the command is "cd", handle it separately.
     if (strcmp(commandName, "cd") == 0)
     {
         // Check for invalid argument case.
         if (commandArgCount != 2)
         {
-            printf("Invalid use of 'cd': 1 argument expected, %d given.\n", commandArgCount);
+            fprintf(stderr, "Invalid use of 'cd': 1 argument expected, %d given.\n", commandArgCount);
         }
         else
         {
@@ -85,7 +120,7 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
             errorStatus = chdir(commandArgs[1]);
             if (errorStatus == -1)
             {
-                printf("Error while using 'cd': %s.\n", strerror(errno));
+                fprintf(stderr, "Error while using 'cd': %s.\n", strerror(errno));
             }
             else
             {
@@ -96,44 +131,44 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
     }
     else
     {
+        // The commandPath should be the commandName, which is also commandArgs[0].
         strncat(commandPath, commandName, BUFFSIZE - strlen(commandPath));
+
+        // Make sure all unused command arguments are NULL.
         for (i = commandArgCount; i < ARGLIMIT; i++)
         {
             commandArgs[i] = NULL;
         }
 
+        // Fork the child process that will run this command.
         pid = fork();
+
         // If this is the child process, execute the command.
         if (pid == 0)
         {
+            // First, check if the pipe is loaded.
             // If the previous command had its output piped to this command, pipe it.
             if (pipeLoaded == 1 && pipesCount > 0)
             {
-                //printf("Unloading pipe with pipesCount = %d.\n", pipesCount);
-                // Close the write end of the pipe.
+                // Close the write end of the pipe (child's write end).
                 close(allPipeFDs[pipesCount - 1][1]);
 
-                // char buf[100];
-                // read(allPipeFDs[pipesCount - 1][0], buf, 99);
-                // printf("%s\n", buf);
-
-                // Pipe stdout from fd to the stdin of the new process.
-                // Send STDIN to the pipe.
+                // Pipe STDOUT from the previous command to the STDIN of the new command.
                 dup2(allPipeFDs[pipesCount - 1][0], STDIN_FILENO);
 
-                // No further action needed from this descriptor.
+                // No further action needed from this descriptor (child's read end).
                 close(allPipeFDs[pipesCount - 1][0]);
             }
 
             // If the output of this needs to be redirected (overwrite) (>), do so.
             if (commandType == CMD_REDIRECT_OVERWRITE)
             {
-                // Open the output file.
+                // Open the output file (with the O_TRUNC flag to overwrite).
                 outputFD = open(commandOutputDestination, O_RDWR | O_CREAT | O_TRUNC, S_IRWXU);
                 errorStatus = outputFD;
                 if (errorStatus == -1)
                 {
-                    printf("Error redirecting output: %s.\n", strerror(errno));
+                    fprintf(stderr, "Error redirecting output: %s.\n", strerror(errno));
                     exit(0);
                 }
 
@@ -141,7 +176,7 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
                 errorStatus = dup2(outputFD, STDOUT_FILENO);
                 if (errorStatus == -1)
                 {
-                    printf("Error redirecting output: %s.\n", strerror(errno));
+                    fprintf(stderr, "Error redirecting output: %s.\n", strerror(errno));
                     exit(0);
                 }
 
@@ -151,12 +186,12 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
             // If the output of this needs to be redirected (append) (>>), do so.
             else if (commandType == CMD_REDIRECT_APPEND)
             {
-                // Open the output file.
+                // Open the output file (with the O_APPEND flag to append).
                 outputFD = open(commandOutputDestination, O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
                 errorStatus = outputFD;
                 if (errorStatus == -1)
                 {
-                    printf("Error redirecting output: %s.\n", strerror(errno));
+                    fprintf(stderr, "Error redirecting output: %s.\n", strerror(errno));
                     exit(0);
                 }
 
@@ -164,7 +199,7 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
                 errorStatus = dup2(outputFD, STDOUT_FILENO);
                 if (errorStatus == -1)
                 {
-                    printf("Error redirecting output: %s.\n", strerror(errno));
+                    fprintf(stderr, "Error redirecting output: %s.\n", strerror(errno));
                     exit(0);
                 }
 
@@ -174,44 +209,35 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
             // If the output of this needs to be piped (|), do so.
             else if (commandType == CMD_PIPE)
             {
-                //printf("Loading pipe with pipesCount = %d.\n", pipesCount);
-                // Pipe stdout to a fd for retrieval by parent.
-                // Close the reading end for the child.
+                // Close the read end of the pipe (child's read end).
                 close(allPipeFDs[pipesCount][0]);
 
-                // Send STDOUT to the pipe.
+                // Pipe STDOUT from this command to what will become the STDIN of the new command.
                 dup2(allPipeFDs[pipesCount][1], STDOUT_FILENO);
-                //dup2(pipeFD[1], STDERR_FILENO);
 
-                // No further action needed from this descriptor.
+                // No further action needed from this descriptor (child's write end).
                 close(allPipeFDs[pipesCount][1]);
             }
 
-            //fprintf(stderr, "Executing command %s.\n", commandPath);
             // Execute the command.
             errorStatus = execvp(commandPath, commandArgs);
-
             if (errorStatus == -1)
             {
-                // If the command is not found in the default /bin, try in /usr/bin.
-                // if (errno == EM)
-                // strncat(commandPath, commandName, BUFFSIZE - strlen(commandPath));
-                // errorStatus = execvp(commandPath, commandArgs);
-                if (errorStatus == -1)
-                {
-                    fprintf(stderr, "Error while executing command: %s.\n", strerror(errno));
-                }
+                fprintf(stderr, "Error while executing command: %s.\n", strerror(errno));
                 exit(0);
             }
         }
         // If this is the parent process, wait for the child to finish executing its command.
         else if (pid > 0)
         {
+            // If the pipe was loaded, close the parent's read and write file descriptors for the loaded pipe.
             if (pipeLoaded == 1)
             {
                 close(allPipeFDs[pipesCount - 1][0]);
                 close(allPipeFDs[pipesCount - 1][1]);
             }
+            
+            // Wait on the child.
             waitpid(pid, NULL, 0);
 
             // Pipe is "unloaded", if it had been loaded.
@@ -223,34 +249,29 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
         }
         
         pid = -1;
-        //printf("Done\n");
     }
     
-    // Deallocate the command arguments.
-    for (i = 0; i < commandArgCount; i++)
-    {
-        free(commandArgs[i]);
-    }
+    // Deallocate the command arguments (should be reached by "cd" logic as well, regardless of success).
+    deallocateCommandArgs(commandArgs, commandArgCount);
 }
 
+
+/*
+[MAIN] Starts the shell and parses user input.
+*/
 int main()
 {
-    //int i;
-    int errorStatus;
-    int commandArgCount = 0;
-    int tokenCount = 0;
-    int pipesCount = 0;
-    char *input = malloc(BUFFSIZE * sizeof(char));
-    char *currentDirectory = malloc(BUFFSIZE * sizeof(char));
-    char *token;
-    char *commandName = malloc(BUFFSIZE * sizeof(char));
-    char *commandPath = malloc(BUFFSIZE * sizeof(char));
-    char *commandOutputDestination = malloc(BUFFSIZE * sizeof(char));
-    char **commandArgs = malloc(ARGLIMIT * sizeof(char *));
-    // for (i = 0; i < ARGLIMIT; i++)
-    // {
-    //     commandArgs[i] = malloc(BUFFSIZE * sizeof(char));
-    // }
+    int errorStatus;                                                        // Error status of a system call.
+    int commandArgCount = 0;                                                // Number of command arguments parsed for a given input.
+    int tokenCount = 0;                                                     // Number of tokens parsed for a given input.
+    int pipesCount = 0;                                                     // Number of pipes parsed for a given input.
+    char *token;                                                            // Current token (delimited by a space " ").
+    char *input = malloc(BUFFSIZE * sizeof(char));                          // Current line of input.
+    char *currentDirectory = malloc(BUFFSIZE * sizeof(char));               // Current working directory.
+    char *commandName = malloc(BUFFSIZE * sizeof(char));                    // Current name of the command to be run.
+    char *commandPath = malloc(BUFFSIZE * sizeof(char));                    // Current path to the command to be run.
+    char *commandOutputDestination = malloc(BUFFSIZE * sizeof(char));       // Current destination for output redirection (if applicable).
+    char **commandArgs = malloc(ARGLIMIT * sizeof(char *));                 // Current arguments for the command to be run.
 
     // Create the signal handler for the interrupt signal, SIGINT.
     struct sigaction interruptAction;
@@ -261,11 +282,15 @@ int main()
     // Define the action upon interrupt.
 	sigaction(SIGINT, &interruptAction, NULL);
     
+    // Get the current working directory.
     getcwd(currentDirectory, BUFFSIZE);
 
+    // Continue reading user input until the user quits the shell using "exit".
     while (strcmp(input, "exit") != 0)
     {
+        // Reset some key variables to prepare for execution of next command.
         resetMemory(&commandArgCount, &errorStatus, input, commandName, commandPath, commandOutputDestination);
+
         // Reset tokenCount and pipesCount separately, since we only want to reset these once per input.
         tokenCount = 0;
         pipesCount = 0;
@@ -290,19 +315,19 @@ int main()
             break;
         }
 
-        //printf("Input: %s\n", input);
-
         // Get the first token.
         token = strtok(input, " ");
 
+        // Interpret this and succeeding tokens.
         while (token != NULL)
         {
+            // If we came here from an interrupt, restart the parse.
             if (restartParse == 1)
             {
                 break;
             }
-            //printf("Token: %s\n", token);
-            // Interpret this token.
+
+            // If this is the first argument, it should be the commandName.
             if (commandArgCount == 0)
             {
                 strncpy(commandName, token, BUFFSIZE);
@@ -325,7 +350,7 @@ int main()
                 tokenCount++;
 
                 // This token should be the file into which output of the built command will be sent.
-                strcpy(commandOutputDestination, token);
+                strncpy(commandOutputDestination, token, BUFFSIZE);
 
                 // Execute the command.
                 executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_REDIRECT_OVERWRITE, commandOutputDestination, pipesCount);
@@ -341,7 +366,7 @@ int main()
                 tokenCount++;
 
                 // This token should be the file into which output of the built command will be sent.
-                strcpy(commandOutputDestination, token);
+                strncpy(commandOutputDestination, token, BUFFSIZE);
 
                 // Execute the command.
                 executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_REDIRECT_APPEND, commandOutputDestination, pipesCount);
@@ -369,9 +394,11 @@ int main()
             {
                 // Allocate space for a new command argument.
                 commandArgs[commandArgCount] = malloc(BUFFSIZE * sizeof(char));
+
                 // Copy the argument to the list of arguments.
                 strncpy(commandArgs[commandArgCount], token, BUFFSIZE);
-                // Increment the number of arguments and tokens read for this command.
+
+                // Increment the number of arguments read for this command.
                 commandArgCount++;
             }
 
@@ -379,11 +406,14 @@ int main()
             token = strtok(NULL, " ");
             tokenCount++;
         }
+
+        // If we came here from an interrupt, restart the parse.
         if (restartParse == 1)
         {
             continue;
         }
 
+        // We have reached the end of our input.
         // Prepare to launch this command, if there is one.
         if (strcmp(commandName, "\0") != 0)
         {
