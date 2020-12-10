@@ -235,7 +235,7 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
 
 int main()
 {
-    int i;
+    //int i;
     int errorStatus;
     int commandArgCount = 0;
     int tokenCount = 0;
@@ -247,10 +247,10 @@ int main()
     char *commandPath = malloc(BUFFSIZE * sizeof(char));
     char *commandOutputDestination = malloc(BUFFSIZE * sizeof(char));
     char **commandArgs = malloc(ARGLIMIT * sizeof(char *));
-    for (i = 0; i < ARGLIMIT; i++)
-    {
-        commandArgs[i] = malloc(BUFFSIZE * sizeof(char));
-    }
+    // for (i = 0; i < ARGLIMIT; i++)
+    // {
+    //     commandArgs[i] = malloc(BUFFSIZE * sizeof(char));
+    // }
 
     // Create the signal handler for the interrupt signal, SIGINT.
     struct sigaction interruptAction;
