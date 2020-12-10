@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 #define BUFFSIZE 4*1024
 #define ARGLIMIT 128
@@ -21,6 +22,25 @@
 pid_t pid;
 int allPipeFDs[PIPELIMIT][2];
 int pipeLoaded = 0;
+int restartParse = 0;
+
+void interruptSignalHandler(int sigNum)
+{
+	//printf("Caught signal %d.\n", sigNum);
+    int errorStatus;
+    printf("\n");
+
+    // If there is a process running (pid > 0), kill it.
+    if (pid > 0)
+    {
+        errorStatus = kill(pid, SIGKILL);
+        if (errorStatus == -1)
+        {
+            printf("Error while killing process %d: %s.\n", pid, strerror(errno));
+        }
+        restartParse = 1;
+    }
+}
 
 void resetMemory(int *commandArgCountPtr, int *errorStatusPtr, char *input, char *commandName, char *commandPath,
                  char *commandOutputDestination)
@@ -202,6 +222,7 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
             fprintf(stderr, "Error while creating process for command: %s.\n", strerror(errno));
         }
         
+        pid = -1;
         //printf("Done\n");
     }
     
@@ -230,6 +251,15 @@ int main()
     {
         commandArgs[i] = malloc(BUFFSIZE * sizeof(char));
     }
+
+    // Create the signal handler for the interrupt signal, SIGINT.
+    struct sigaction interruptAction;
+	interruptAction.sa_handler = interruptSignalHandler;
+	sigemptyset(&interruptAction.sa_mask);
+	interruptAction.sa_flags = 0;
+
+    // Define the action upon interrupt.
+	sigaction(SIGINT, &interruptAction, NULL);
     
     getcwd(currentDirectory, BUFFSIZE);
 
@@ -239,6 +269,9 @@ int main()
         // Reset tokenCount and pipesCount separately, since we only want to reset these once per input.
         tokenCount = 0;
         pipesCount = 0;
+
+        // Make sure we do not continually restart the parsing, if we came here from a SIGINT killing the last command.
+        restartParse = 0;
 
         // Prompt the user for their input command(s).
         printf("%s $ ", currentDirectory);
@@ -264,6 +297,10 @@ int main()
 
         while (token != NULL)
         {
+            if (restartParse == 1)
+            {
+                break;
+            }
             //printf("Token: %s\n", token);
             // Interpret this token.
             if (commandArgCount == 0)
@@ -341,6 +378,10 @@ int main()
             // Get the next token.
             token = strtok(NULL, " ");
             tokenCount++;
+        }
+        if (restartParse == 1)
+        {
+            continue;
         }
 
         // Prepare to launch this command, if there is one.
