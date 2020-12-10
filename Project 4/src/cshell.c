@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #define BUFFSIZE 4*1024
 #define ARGLIMIT 128
@@ -91,6 +92,10 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
                 //printf("Unloading pipe with pipesCount = %d.\n", pipesCount);
                 // Close the write end of the pipe.
                 close(allPipeFDs[pipesCount - 1][1]);
+
+                // char buf[100];
+                // read(allPipeFDs[pipesCount - 1][0], buf, 99);
+                // printf("%s\n", buf);
 
                 // Pipe stdout from fd to the stdin of the new process.
                 // Send STDIN to the pipe.
@@ -182,6 +187,11 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
         // If this is the parent process, wait for the child to finish executing its command.
         else if (pid > 0)
         {
+            if (pipeLoaded == 1)
+            {
+                close(allPipeFDs[pipesCount - 1][0]);
+                close(allPipeFDs[pipesCount - 1][1]);
+            }
             waitpid(pid, NULL, 0);
 
             // Pipe is "unloaded", if it had been loaded.
