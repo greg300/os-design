@@ -8,8 +8,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#define BUFFSIZE 512
+#define BUFFSIZE 4*1024
 #define ARGLIMIT 128
+#define PIPELIMIT 128
 
 #define CMD_NORMAL 1
 #define CMD_REDIRECT_OVERWRITE 2
@@ -17,8 +18,11 @@
 #define CMD_PIPE 4
 
 pid_t pid;
+int allPipeFDs[PIPELIMIT][2];
+int pipeLoaded = 0;
 
-void resetMemory(int *commandArgCountPtr, int *errorStatusPtr, char *input, char *commandName, char *commandPath, char *commandOutputDestination)
+void resetMemory(int *commandArgCountPtr, int *errorStatusPtr, char *input, char *commandName, char *commandPath,
+                 char *commandOutputDestination)
 {
     *commandArgCountPtr = 0;
     *errorStatusPtr = 0;
@@ -28,22 +32,36 @@ void resetMemory(int *commandArgCountPtr, int *errorStatusPtr, char *input, char
     strcpy(commandOutputDestination, "\0");
 }
 
-void executeCommand(char *currentDirectory, char *commandName, char *commandPath, char **commandArgs, int commandArgCount, int commandType, char *commandOutputDestination)
+void executeCommand(char *currentDirectory, char *commandName, char *commandPath, char **commandArgs,
+                    int commandArgCount, int commandType, char *commandOutputDestination, int pipesCount)
 {
     int i;
     int errorStatus;
     int outputFD;
+    int *pipeFD = allPipeFDs[pipesCount];
+
+    if (commandType == CMD_PIPE)
+    {
+        errorStatus = pipe(pipeFD);
+        if (errorStatus == -1)
+        {
+            printf("Error while piping output: %s.\n", strerror(errno));
+            return;
+        }
+    }
 
     // Prepare to launch the given command.
     // If the command is "cd", handle it separately.
     if (strcmp(commandName, "cd") == 0)
     {
+        // Check for invalid argument case.
         if (commandArgCount != 2)
         {
             printf("Invalid use of 'cd': 1 argument expected, %d given.\n", commandArgCount);
         }
         else
         {
+            // Change directory using chdir.
             errorStatus = chdir(commandArgs[1]);
             if (errorStatus == -1)
             {
@@ -51,6 +69,7 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
             }
             else
             {
+                // Update the current directory.
                 getcwd(currentDirectory, BUFFSIZE);
             }
         }
@@ -67,7 +86,25 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
         // If this is the child process, execute the command.
         if (pid == 0)
         {
-            // If the output of this needs to be redirected (overwrite), do so.
+            // If the previous command had its output piped to this command, pipe it.
+            if (pipeLoaded == 1)
+            {
+                printf("Unloading pipe!\n");
+                // Close the write end of the pipe.
+                close(allPipeFDs[pipesCount][1]);
+
+                // Pipe stdout from fd to the stdin of the new process.
+                // Send STDIN to the pipe.
+                dup2(allPipeFDs[pipesCount][0], STDIN_FILENO);
+
+                // No further action needed from this descriptor.
+                close(allPipeFDs[pipesCount][0]);
+
+                // Pipe is "unloaded".
+                pipeLoaded = 0;
+            }
+
+            // If the output of this needs to be redirected (overwrite) (>), do so.
             if (commandType == CMD_REDIRECT_OVERWRITE)
             {
                 // Open the output file.
@@ -86,8 +123,11 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
                     printf("Error redirecting output: %s.\n", strerror(errno));
                     exit(0);
                 }
+
+                // No further action needed from this descriptor.
+                close(outputFD);
             }
-            // If the output of this needs to be redirected (append), do so.
+            // If the output of this needs to be redirected (append) (>>), do so.
             else if (commandType == CMD_REDIRECT_APPEND)
             {
                 // Open the output file.
@@ -106,14 +146,29 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
                     printf("Error redirecting output: %s.\n", strerror(errno));
                     exit(0);
                 }
+
+                // No further action needed from this descriptor.
+                close(outputFD);
             }
-            // If the output of this needs to be piped, do so.
+            // If the output of this needs to be piped (|), do so.
             else if (commandType == CMD_PIPE)
             {
                 // Pipe stdout to a fd for retrieval by parent.
+                // Close the reading end for the child.
+                close(pipeFD[0]);
+
+                // Send STDOUT and STDERR to the pipe.
+                dup2(pipeFD[1], STDOUT_FILENO);
+                dup2(pipeFD[1], STDERR_FILENO);
+
+                // No further action needed from this descriptor.
+                close(pipeFD[1]);
+
+                // Pipe is "loaded".
+                pipeLoaded = 1;
             }
 
-            //fprintf(stdout, "Executing command %s.\n", commandPath);
+            fprintf(stdout, "Executing command %s.\n", commandPath);
             // Execute the command.
             errorStatus = execvp(commandPath, commandArgs);
             if (errorStatus == -1)
@@ -122,8 +177,16 @@ void executeCommand(char *currentDirectory, char *commandName, char *commandPath
             }
             exit(0);
         }
+        // If this is the parent process, wait for the child to finish executing its command.
+        else if (pid > 0)
+        {
+            waitpid(pid, NULL, 0);
+        }
+        else
+        {
+            fprintf(stdout, "Error while creating process for command: %s.\n", strerror(errno));
+        }
         
-        waitpid(pid, NULL, 0);
         //printf("Done\n");
     }
     
@@ -140,6 +203,7 @@ int main()
     int errorStatus;
     int commandArgCount = 0;
     int tokenCount = 0;
+    int pipesCount = 0;
     char *input = malloc(BUFFSIZE * sizeof(char));
     char *currentDirectory = malloc(BUFFSIZE * sizeof(char));
     char *token;
@@ -157,7 +221,9 @@ int main()
     while (strcmp(input, "exit") != 0)
     {
         resetMemory(&commandArgCount, &errorStatus, input, commandName, commandPath, commandOutputDestination);
+        // Reset tokenCount and pipesCount separately, since we only want to reset these once per input.
         tokenCount = 0;
+        pipesCount = 0;
 
         // Prompt the user for their input command(s).
         printf("%s $ ", currentDirectory);
@@ -170,6 +236,7 @@ int main()
             *newLinePos = '\0';
         }
 
+        // If the user entered "exit", stop the CShell.
         if (strcmp(input, "exit") == 0)
         {
             break;
@@ -179,6 +246,7 @@ int main()
 
         // Get the first token.
         token = strtok(input, " ");
+
         while (token != NULL)
         {
             //printf("Token: %s\n", token);
@@ -192,7 +260,7 @@ int main()
             if (strcmp(token, ";") == 0)
             {
                 // Execute the command.
-                executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_NORMAL, NULL);
+                executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_NORMAL, NULL, pipesCount);
 
                 // Reset counters and memory for the next command.
                 resetMemory(&commandArgCount, &errorStatus, input, commandName, commandPath, commandOutputDestination);
@@ -208,7 +276,7 @@ int main()
                 strcpy(commandOutputDestination, token);
 
                 // Execute the command.
-                executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_REDIRECT_OVERWRITE, commandOutputDestination);
+                executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_REDIRECT_OVERWRITE, commandOutputDestination, pipesCount);
 
                 // Reset counters and memory for the next command.
                 resetMemory(&commandArgCount, &errorStatus, input, commandName, commandPath, commandOutputDestination);
@@ -224,7 +292,7 @@ int main()
                 strcpy(commandOutputDestination, token);
 
                 // Execute the command.
-                executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_REDIRECT_APPEND, commandOutputDestination);
+                executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_REDIRECT_APPEND, commandOutputDestination, pipesCount);
 
                 // Reset counters and memory for the next command.
                 resetMemory(&commandArgCount, &errorStatus, input, commandName, commandPath, commandOutputDestination);
@@ -233,10 +301,13 @@ int main()
             else if (strcmp(token, "|") == 0)
             {
                 // Execute the command.
-                executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_PIPE, NULL);
+                executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_PIPE, NULL, pipesCount);
 
                 // Reset counters and memory for the next command.
                 resetMemory(&commandArgCount, &errorStatus, input, commandName, commandPath, commandOutputDestination);
+
+                // Increment number of pipes for commands that follow in this input.
+                pipesCount++;
             }
             // Otherwise, token is a command or command argument.
             else
@@ -254,10 +325,10 @@ int main()
             tokenCount++;
         }
 
-        // Prepare to launch this command.
+        // Prepare to launch this command, if there is one.
         if (strcmp(commandName, "\0") != 0)
         {
-            executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_NORMAL, NULL);
+            executeCommand(currentDirectory, commandName, commandPath, commandArgs, commandArgCount, CMD_NORMAL, NULL, pipesCount);
         }
     }
 
